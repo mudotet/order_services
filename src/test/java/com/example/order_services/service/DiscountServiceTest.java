@@ -34,7 +34,7 @@ class DiscountServiceTest {
         Discount discount = new Discount();
         discount.setId("discount-1");
         discount.setPercentageDiscount(new BigDecimal("10.00"));
-        when(discountRepository.findAllByDeletedFalse()).thenReturn(List.of(discount));
+        when(discountRepository.findAll()).thenReturn(List.of(discount));
 
         List<DiscountResponse> response = discountService.getDiscounts();
 

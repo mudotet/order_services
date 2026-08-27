@@ -23,7 +23,7 @@ public class InventoryServiceImpl implements InventoryService {
             UpdateQuantityRequest request
     ) {
         Inventory inventory = inventoryRepository
-                .findByProductVariantIdAndDeletedFalse(productVariantId)
+                .findByProductVariantId(productVariantId)
                 .orElseThrow(() -> new ApplicationException(
                         EnumCode.NOT_FOUND,
                         "Inventory not found"

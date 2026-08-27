@@ -37,6 +37,7 @@ public abstract class BaseEntity {
     @Column(nullable = false)
     private boolean deleted;
 
+    // tự động gán thời gian tạo và cập nhật khi lưu hoặc cập nhật entity
     @PrePersist
     void createAuditFields() {
         LocalDateTime now = LocalDateTime.now();

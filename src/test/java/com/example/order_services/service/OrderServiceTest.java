@@ -78,10 +78,10 @@ class OrderServiceTest {
     @Test
     void createOrderPersistsDiscountReducesStockAndClearsCart() {
         CartItem cartItem = item("variant-a", 2);
-        stubLockedCart("user-1", cartItem);
+        stubCart("user-1", cartItem);
         stubVariant("variant-a", "Tea", "10.00");
         stubDiscount("discount-1", "10.00");
-        Inventory inventory = stubLockedInventory("variant-a", 3);
+        Inventory inventory = stubInventory("variant-a", 3);
         stubPendingState();
         List<OrderItem> savedOrderItems = new ArrayList<>();
         when(orderRepository.save(org.mockito.ArgumentMatchers.any(OrderEntity.class)))
@@ -125,17 +125,8 @@ class OrderServiceTest {
         Cart cart = new Cart();
         cart.setId("cart-1");
         cart.setUserId(userId);
-        when(cartRepository.findByUserIdAndDeletedFalse(userId)).thenReturn(Optional.of(cart));
-        when(cartItemRepository.findAllByCartIdAndDeletedFalse("cart-1"))
-                .thenReturn(List.of(items));
-    }
-
-    private void stubLockedCart(String userId, CartItem... items) {
-        Cart cart = new Cart();
-        cart.setId("cart-1");
-        cart.setUserId(userId);
-        when(cartRepository.findForUpdateByUserId(userId)).thenReturn(Optional.of(cart));
-        when(cartItemRepository.findAllByCartIdAndDeletedFalse("cart-1"))
+        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
+        when(cartItemRepository.findAllByCartId("cart-1"))
                 .thenReturn(List.of(items));
     }
 
@@ -144,7 +135,7 @@ class OrderServiceTest {
         variant.setId(id);
         variant.setProductVariant(name);
         variant.setPrice(new BigDecimal(price));
-        when(productVariantRepository.findByIdAndDeletedFalse(id))
+        when(productVariantRepository.findById(id))
                 .thenReturn(Optional.of(variant));
     }
 
@@ -152,15 +143,15 @@ class OrderServiceTest {
         Discount discount = new Discount();
         discount.setId(id);
         discount.setPercentageDiscount(new BigDecimal(percentage));
-        when(discountRepository.findByIdAndDeletedFalse(id))
+        when(discountRepository.findById(id))
                 .thenReturn(Optional.of(discount));
     }
 
-    private Inventory stubLockedInventory(String productVariantId, int quantity) {
+    private Inventory stubInventory(String productVariantId, int quantity) {
         Inventory inventory = new Inventory();
         inventory.setProductVariantId(productVariantId);
         inventory.setQuantityInStock(quantity);
-        when(inventoryRepository.findForUpdateByProductVariantId(productVariantId))
+        when(inventoryRepository.findByProductVariantId(productVariantId))
                 .thenReturn(Optional.of(inventory));
         return inventory;
     }
@@ -169,7 +160,7 @@ class OrderServiceTest {
         OrderState pending = new OrderState();
         pending.setId("state-pending");
         pending.setState("PENDING");
-        when(orderStateRepository.findByStateAndDeletedFalse("PENDING"))
+        when(orderStateRepository.findByState("PENDING"))
                 .thenReturn(Optional.of(pending));
     }
 }

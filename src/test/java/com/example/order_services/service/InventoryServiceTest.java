@@ -35,7 +35,7 @@ class InventoryServiceTest {
         Inventory inventory = new Inventory();
         inventory.setProductVariantId("variant-1");
         inventory.setQuantityInStock(3);
-        when(inventoryRepository.findByProductVariantIdAndDeletedFalse("variant-1"))
+        when(inventoryRepository.findByProductVariantId("variant-1"))
                 .thenReturn(Optional.of(inventory));
         when(inventoryRepository.save(inventory)).thenReturn(inventory);
 

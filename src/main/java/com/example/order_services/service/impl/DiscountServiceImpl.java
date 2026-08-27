@@ -17,7 +17,7 @@ public class DiscountServiceImpl implements DiscountService {
 
     @Override
     public List<DiscountResponse> getDiscounts() {
-        return discountRepository.findAllByDeletedFalse()
+        return discountRepository.findAll()
                 .stream()
                 .map(discount -> modelMapper.map(discount, DiscountResponse.class))
                 .toList();

@@ -30,7 +30,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -56,7 +55,7 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
-        Cart cart = cartRepository.findForUpdateByUserId(request.getUserId())
+        Cart cart = cartRepository.findByUserId(request.getUserId())
                 .orElseThrow(() -> new ApplicationException(
                         EnumCode.BAD_REQUEST,
                         "Cart is empty"
@@ -64,7 +63,7 @@ public class OrderServiceImpl implements OrderService {
         OrderContext context = loadOrderContext(cart, request.getDiscountId());
         List<Inventory> inventories = requireAvailableStock(context.lines());
         OrderState pending = orderStateRepository
-                .findByStateAndDeletedFalse(OrderStatus.PENDING.name())
+                .findByState(OrderStatus.PENDING.name())
                 .orElseThrow(() -> new ApplicationException(
                         EnumCode.NOT_FOUND,
                         "PENDING order state not found"
@@ -83,7 +82,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private OrderContext loadOrderContext(String userId, String discountId) {
-        Cart cart = cartRepository.findByUserIdAndDeletedFalse(userId)
+        Cart cart = cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new ApplicationException(
                         EnumCode.BAD_REQUEST,
                         "Cart is empty"
@@ -93,14 +92,13 @@ public class OrderServiceImpl implements OrderService {
 
     private OrderContext loadOrderContext(Cart cart, String discountId) {
         List<CartItem> cartItems = cartItemRepository
-                .findAllByCartIdAndDeletedFalse(cart.getId());
+                .findAllByCartId(cart.getId());
         if (cartItems.isEmpty()) {
             throw new ApplicationException(EnumCode.BAD_REQUEST, "Cart is empty");
         }
 
         List<OrderLine> lines = cartItems.stream()
                 .map(this::toOrderLine)
-                .sorted(Comparator.comparing(line -> line.productVariant().getId()))
                 .toList();
         BigDecimal subtotal = money(lines.stream()
                 .map(OrderLine::lineTotal)
@@ -118,7 +116,7 @@ public class OrderServiceImpl implements OrderService {
 
     private OrderLine toOrderLine(CartItem item) {
         ProductVariant variant = productVariantRepository
-                .findByIdAndDeletedFalse(item.getProductVariantId())
+                .findById(item.getProductVariantId())
                 .orElseThrow(() -> new ApplicationException(
                         EnumCode.NOT_FOUND,
                         "Product variant not found"
@@ -133,7 +131,7 @@ public class OrderServiceImpl implements OrderService {
         if (discountId == null || discountId.isBlank()) {
             return BigDecimal.ZERO;
         }
-        Discount discount = discountRepository.findByIdAndDeletedFalse(discountId)
+        Discount discount = discountRepository.findById(discountId)
                 .orElseThrow(() -> new ApplicationException(
                         EnumCode.NOT_FOUND,
                         "Discount not found"
@@ -148,7 +146,7 @@ public class OrderServiceImpl implements OrderService {
     private List<Inventory> requireAvailableStock(List<OrderLine> lines) {
         return lines.stream().map(line -> {
             Inventory inventory = inventoryRepository
-                    .findForUpdateByProductVariantId(line.productVariant().getId())
+                    .findByProductVariantId(line.productVariant().getId())
                     .orElseThrow(() -> new ApplicationException(
                             EnumCode.NOT_FOUND,
                             "Inventory not found"

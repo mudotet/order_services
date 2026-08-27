@@ -26,7 +26,7 @@ public class CartServiceImpl implements CartService {
 
     @Override
     public CartDetailResponse getCart(String userId) {
-        return cartRepository.findByUserIdAndDeletedFalse(userId)
+        return cartRepository.findByUserId(userId)
                 .map(this::toCartDetail)
                 .orElseGet(() -> new CartDetailResponse(
                         userId,
@@ -37,7 +37,7 @@ public class CartServiceImpl implements CartService {
 
     private CartDetailResponse toCartDetail(Cart cart) {
         List<CartItemResponse> items = cartItemRepository
-                .findAllByCartIdAndDeletedFalse(cart.getId())
+                .findAllByCartId(cart.getId())
                 .stream()
                 .map(this::toCartItemResponse)
                 .toList();
@@ -49,7 +49,7 @@ public class CartServiceImpl implements CartService {
 
     private CartItemResponse toCartItemResponse(CartItem item) {
         ProductVariant variant = productVariantRepository
-                .findByIdAndDeletedFalse(item.getProductVariantId())
+                .findById(item.getProductVariantId())
                 .orElseThrow(() -> new ApplicationException(
                         EnumCode.NOT_FOUND,
                         "Product variant not found"

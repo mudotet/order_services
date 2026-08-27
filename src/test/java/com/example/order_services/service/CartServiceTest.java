@@ -34,7 +34,7 @@ class CartServiceTest {
 
     @Test
     void getCartReturnsAnEmptyCartWhenNoCartExists() {
-        when(cartRepository.findByUserIdAndDeletedFalse("user-1"))
+        when(cartRepository.findByUserId("user-1"))
                 .thenReturn(Optional.empty());
 
         CartDetailResponse response = cartService.getCart("user-1");
@@ -55,11 +55,11 @@ class CartServiceTest {
         variant.setId("variant-1");
         variant.setProductVariant("Large tea");
         variant.setPrice(new BigDecimal("7.50"));
-        when(cartRepository.findByUserIdAndDeletedFalse("user-1"))
+        when(cartRepository.findByUserId("user-1"))
                 .thenReturn(Optional.of(cart));
-        when(cartItemRepository.findAllByCartIdAndDeletedFalse("cart-1"))
+        when(cartItemRepository.findAllByCartId("cart-1"))
                 .thenReturn(List.of(item));
-        when(productVariantRepository.findByIdAndDeletedFalse("variant-1"))
+        when(productVariantRepository.findById("variant-1"))
                 .thenReturn(Optional.of(variant));
 
         CartDetailResponse response = cartService.getCart("user-1");
