@@ -1,7 +1,7 @@
 package com.example.order_services.controller;
 
 import com.example.order_services.common.BaseResponse;
-import com.example.order_services.dto.request.UpdateQuantityRequest;
+import com.example.order_services.dto.request.UpdateInventoryQuantityRequest;
 import com.example.order_services.dto.response.InventoryResponse;
 import com.example.order_services.service.InventoryService;
 import jakarta.validation.Valid;
@@ -21,7 +21,7 @@ public class InventoryController {
     @PutMapping("/{productVariantId}/quantity")
     public BaseResponse<InventoryResponse> updateQuantity(
             @PathVariable String productVariantId,
-            @Valid @RequestBody UpdateQuantityRequest request
+            @Valid @RequestBody UpdateInventoryQuantityRequest request
     ) {
         return BaseResponse.success(inventoryService.updateQuantity(productVariantId, request));
     }

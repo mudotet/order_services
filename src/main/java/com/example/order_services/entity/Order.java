@@ -1,12 +1,8 @@
 package com.example.order_services.entity;
 
 import com.example.order_services.common.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.math.BigDecimal;
 
@@ -14,13 +10,17 @@ import java.math.BigDecimal;
 @Setter
 @NoArgsConstructor
 @Entity
+@AllArgsConstructor
+@Builder
 @Table(name = "orders")
-public class OrderEntity extends BaseEntity {
-    @Column(name = "user_id", nullable = false, length = 36)
-    private String userId;
+public class Order extends BaseEntity {
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-    @Column(name = "discount_id", length = 36)
-    private String discountId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "discount_id")
+    private Discount discount;
 
     @Column(name = "payment_id", length = 36)
     private String paymentId;
@@ -28,8 +28,9 @@ public class OrderEntity extends BaseEntity {
     @Column(name = "address_id", nullable = false, length = 36)
     private String addressId;
 
-    @Column(name = "order_state_id", nullable = false, length = 36)
-    private String orderStateId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_state_id", nullable = false)
+    private OrderState orderState;
 
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal subtotal;

@@ -1,33 +1,29 @@
 package com.example.order_services.entity;
 
 import com.example.order_services.common.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.math.BigDecimal;
 
 @Getter
 @Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 @Entity
 @Table(name = "order_items")
 public class OrderItem extends BaseEntity {
-    @Column(name = "order_id", nullable = false, length = 36)
-    private String orderId;
-
-    @Column(name = "product_variant_id", nullable = false, length = 36)
-    private String productVariantId;
-
-    @Column(name = "unit_price", nullable = false, precision = 15, scale = 2)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id", nullable = false)
+    private Order order;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_variant_id", nullable = false)
+    private ProductVariant productVariant;
+    @Column(name = "unit_price", nullable = false)
     private BigDecimal unitPrice;
-
-    @Column(nullable = false)
+    @Column(name = "quantity", nullable = false)
     private Integer quantity;
-
-    @Column(name = "line_total", nullable = false, precision = 15, scale = 2)
+    @Column(name = "line_total", nullable = false)
     private BigDecimal lineTotal;
 }

@@ -1,223 +1,164 @@
 package com.example.order_services.service.impl;
 
+import com.example.order_services.common.DiscountType;
 import com.example.order_services.common.EnumCode;
 import com.example.order_services.common.OrderStatus;
 import com.example.order_services.dto.request.CreateOrderRequest;
-import com.example.order_services.dto.request.OrderSummaryRequest;
 import com.example.order_services.dto.response.OrderResponse;
 import com.example.order_services.dto.response.OrderSummaryResponse;
-import com.example.order_services.entity.Cart;
-import com.example.order_services.entity.CartItem;
-import com.example.order_services.entity.Discount;
-import com.example.order_services.entity.Inventory;
-import com.example.order_services.entity.OrderEntity;
-import com.example.order_services.entity.OrderItem;
-import com.example.order_services.entity.OrderState;
-import com.example.order_services.entity.ProductVariant;
+import com.example.order_services.entity.*;
 import com.example.order_services.exception.ApplicationException;
-import com.example.order_services.repository.CartItemRepository;
-import com.example.order_services.repository.CartRepository;
-import com.example.order_services.repository.DiscountRepository;
-import com.example.order_services.repository.InventoryRepository;
-import com.example.order_services.repository.OrderItemRepository;
-import com.example.order_services.repository.OrderRepository;
-import com.example.order_services.repository.OrderStateRepository;
-import com.example.order_services.repository.ProductVariantRepository;
+import com.example.order_services.repository.*;
+import com.example.order_services.service.CurrentUserService;
 import com.example.order_services.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('USER')")
+@Transactional(readOnly = true)
 public class OrderServiceImpl implements OrderService {
-    private static final BigDecimal ONE_HUNDRED = new BigDecimal("100");
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
 
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
-    private final ProductVariantRepository productVariantRepository;
-    private final DiscountRepository discountRepository;
+    private final UserDiscountRepository userDiscountRepository;
     private final InventoryRepository inventoryRepository;
     private final OrderStateRepository orderStateRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final CurrentUserService currentUserService;
 
     @Override
-    public OrderSummaryResponse calculateSummary(OrderSummaryRequest request) {
-        return loadOrderContext(request.getUserId(), request.getDiscountId()).summary();
+    public OrderSummaryResponse calculateOrderSummary(String discountId) {
+        User user = currentUserService.getCurrentUser();
+        Cart cart = cartRepository.findByUser_IdAndDeletedFalse(user.getId())
+                .orElseThrow(() -> new ApplicationException(EnumCode.BAD_REQUEST, "Cart is empty"));
+        return loadCheckout(user.getId(), cart, discountId).summary();
     }
 
     @Override
-    @Transactional
     public OrderResponse createOrder(CreateOrderRequest request) {
-        Cart cart = cartRepository.findByUserId(request.getUserId())
-                .orElseThrow(() -> new ApplicationException(
-                        EnumCode.BAD_REQUEST,
-                        "Cart is empty"
-                ));
-        OrderContext context = loadOrderContext(cart, request.getDiscountId());
-        List<Inventory> inventories = requireAvailableStock(context.lines());
-        OrderState pending = orderStateRepository
-                .findByState(OrderStatus.PENDING.name())
-                .orElseThrow(() -> new ApplicationException(
-                        EnumCode.NOT_FOUND,
-                        "PENDING order state not found"
-                ));
-        OrderEntity order = orderRepository.save(newOrder(request, pending, context.summary()));
-        orderItemRepository.saveAll(newOrderItems(order.getId(), context.lines()));
-        reduceInventoryAndClearCart(inventories, context.lines());
-        return new OrderResponse(
-                order.getId(),
-                pending.getState(),
-                context.summary().getSubtotal(),
-                context.summary().getDiscountAmount(),
-                context.summary().getShippingFee(),
-                context.summary().getTotal()
-        );
-    }
-
-    private OrderContext loadOrderContext(String userId, String discountId) {
-        Cart cart = cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new ApplicationException(
-                        EnumCode.BAD_REQUEST,
-                        "Cart is empty"
-                ));
-        return loadOrderContext(cart, discountId);
-    }
-
-    private OrderContext loadOrderContext(Cart cart, String discountId) {
-        List<CartItem> cartItems = cartItemRepository
-                .findAllByCartId(cart.getId());
-        if (cartItems.isEmpty()) {
-            throw new ApplicationException(EnumCode.BAD_REQUEST, "Cart is empty");
+        User user = currentUserService.getCurrentUser();
+        // ponytail: write transaction deferred for learning; restore it before processing real orders.
+        Cart cart = cartRepository.findByUserIdForUpdate(user.getId())
+                .orElseThrow(() -> new ApplicationException(EnumCode.BAD_REQUEST, "Cart is empty"));
+        Checkout checkout = loadCheckout(user.getId(), cart, request.getDiscountId());
+        Map<String, Long> quantities = new TreeMap<>();
+        for (CartItem item : checkout.items()) {
+            quantities.merge(item.getProductVariant().getId(), item.getProductQuantity().longValue(), Long::sum);
         }
-
-        List<OrderLine> lines = cartItems.stream()
-                .map(this::toOrderLine)
-                .toList();
-        BigDecimal subtotal = money(lines.stream()
-                .map(OrderLine::lineTotal)
-                .reduce(ZERO_MONEY, BigDecimal::add));
-        BigDecimal discountPercentage = findDiscountPercentage(discountId);
-        BigDecimal discountAmount = money(
-                subtotal.multiply(discountPercentage).divide(ONE_HUNDRED)
-        );
-        BigDecimal total = money(subtotal.subtract(discountAmount));
-        return new OrderContext(
-                lines,
-                new OrderSummaryResponse(subtotal, discountAmount, ZERO_MONEY, total)
-        );
-    }
-
-    private OrderLine toOrderLine(CartItem item) {
-        ProductVariant variant = productVariantRepository
-                .findById(item.getProductVariantId())
-                .orElseThrow(() -> new ApplicationException(
-                        EnumCode.NOT_FOUND,
-                        "Product variant not found"
-                ));
-        BigDecimal lineTotal = money(
-                variant.getPrice().multiply(BigDecimal.valueOf(item.getProductQuantity()))
-        );
-        return new OrderLine(item, variant, lineTotal);
-    }
-
-    private BigDecimal findDiscountPercentage(String discountId) {
-        if (discountId == null || discountId.isBlank()) {
-            return BigDecimal.ZERO;
-        }
-        Discount discount = discountRepository.findById(discountId)
-                .orElseThrow(() -> new ApplicationException(
-                        EnumCode.NOT_FOUND,
-                        "Discount not found"
-                ));
-        return discount.getPercentageDiscount();
-    }
-
-    private BigDecimal money(BigDecimal value) {
-        return value.setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private List<Inventory> requireAvailableStock(List<OrderLine> lines) {
-        return lines.stream().map(line -> {
-            Inventory inventory = inventoryRepository
-                    .findByProductVariantId(line.productVariant().getId())
-                    .orElseThrow(() -> new ApplicationException(
-                            EnumCode.NOT_FOUND,
-                            "Inventory not found"
-                    ));
-            if (inventory.getQuantityInStock() < line.cartItem().getProductQuantity()) {
+        Map<String, Inventory> inventories = inventoryRepository.findByProductVariantIdsForUpdate(quantities.keySet())
+                .stream().collect(Collectors.toMap(inventory -> inventory.getProductVariant().getId(), Function.identity()));
+        for (var entry : quantities.entrySet()) {
+            Inventory inventory = inventories.get(entry.getKey());
+            if (inventory == null) {
+                throw new ApplicationException(EnumCode.NOT_FOUND, "Inventory not found");
+            }
+            if (inventory.getQuantityInStock() < entry.getValue()) {
                 throw new ApplicationException(EnumCode.BAD_REQUEST, "Insufficient stock");
             }
-            return inventory;
-        }).toList();
-    }
-
-    private OrderEntity newOrder(
-            CreateOrderRequest request,
-            OrderState pending,
-            OrderSummaryResponse summary
-    ) {
-        OrderEntity order = new OrderEntity();
-        order.setUserId(request.getUserId());
-        order.setAddressId(request.getAddressId());
-        order.setPaymentId(request.getPaymentId());
-        order.setDiscountId(blankToNull(request.getDiscountId()));
-        order.setOrderStateId(pending.getId());
-        order.setSubtotal(summary.getSubtotal());
-        order.setDiscountAmount(summary.getDiscountAmount());
-        order.setShippingFee(summary.getShippingFee());
-        order.setTotal(summary.getTotal());
-        return order;
-    }
-
-    private List<OrderItem> newOrderItems(String orderId, List<OrderLine> lines) {
-        return lines.stream().map(line -> {
-            OrderItem item = new OrderItem();
-            item.setOrderId(orderId);
-            item.setProductVariantId(line.productVariant().getId());
-            item.setUnitPrice(line.productVariant().getPrice());
-            item.setQuantity(line.cartItem().getProductQuantity());
-            item.setLineTotal(line.lineTotal());
-            return item;
-        }).toList();
-    }
-
-    private void reduceInventoryAndClearCart(
-            List<Inventory> inventories,
-            List<OrderLine> lines
-    ) {
-        for (int index = 0; index < lines.size(); index++) {
-            Inventory inventory = inventories.get(index);
-            CartItem cartItem = lines.get(index).cartItem();
-            inventory.setQuantityInStock(
-                    inventory.getQuantityInStock() - cartItem.getProductQuantity()
-            );
-            cartItem.setDeleted(true);
         }
-        inventoryRepository.saveAll(inventories);
-        cartItemRepository.saveAll(lines.stream().map(OrderLine::cartItem).toList());
+
+        OrderState pending = orderStateRepository.findByStateAndDeletedFalse(OrderStatus.PENDING.name())
+                .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "PENDING order state not found"));
+        OrderSummaryResponse summary = checkout.summary();
+        Order order = Order.builder()
+                .user(user)
+                .discount(checkout.assignment() == null ? null : checkout.assignment().getDiscount())
+                .addressId(request.getAddressId())
+                .paymentId(request.getPaymentId())
+                .orderState(pending)
+                .subtotal(summary.getSubtotal())
+                .discountAmount(summary.getDiscountAmount())
+                .shippingFee(summary.getShippingFee())
+                .total(summary.getTotal())
+                .build();
+        orderRepository.save(order);
+        List<OrderItem> orderItems = checkout.items().stream().map(item -> OrderItem.builder()
+                .order(order)
+                .productVariant(item.getProductVariant())
+                .quantity(item.getProductQuantity())
+                .unitPrice(item.getProductVariant().getPrice())
+                .lineTotal(calculateLineTotal(item))
+                .build()).toList();
+        orderItemRepository.saveAll(orderItems);
+
+        for (var entry : quantities.entrySet()) {
+            Inventory inventory = inventories.get(entry.getKey());
+            inventory.setQuantityInStock(inventory.getQuantityInStock() - entry.getValue().intValue());
+        }
+        inventoryRepository.saveAll(inventories.values());
+        checkout.items().forEach(item -> item.setDeleted(true));
+        cartItemRepository.saveAll(checkout.items());
+        if (checkout.assignment() != null) {
+            checkout.assignment().setUsed(true);
+            checkout.assignment().setStatus("USED");
+            userDiscountRepository.save(checkout.assignment());
+        }
+        return OrderResponse.builder()
+                .id(order.getId())
+                .state(pending.getState())
+                .discountAmount(summary.getDiscountAmount())
+                .subtotal(summary.getSubtotal())
+                .shippingFee(summary.getShippingFee())
+                .total(summary.getTotal())
+                .build();
     }
 
-    private String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
+    private Checkout loadCheckout(String userId, Cart cart, String discountId) {
+        List<CartItem> items = cartItemRepository.findActiveItemsByCartId(cart.getId());
+        if (items.isEmpty()) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Cart is empty");
+        }
+        BigDecimal subtotal = ZERO_MONEY;
+        for (CartItem item : items) {
+            if (item.getProductQuantity() == null || item.getProductQuantity() <= 0
+                    || item.getProductVariant().getPrice() == null || item.getProductVariant().getPrice().signum() < 0) {
+                throw new ApplicationException(EnumCode.BAD_REQUEST, "Invalid cart item");
+            }
+            subtotal = subtotal.add(calculateLineTotal(item));
+        }
+        UserDiscount assignment = null;
+        BigDecimal discountAmount = ZERO_MONEY;
+        if (discountId != null && !discountId.isBlank()) {
+            assignment = userDiscountRepository.findAvailableAssignment(userId, discountId)
+                    .orElseThrow(() -> new ApplicationException(EnumCode.BAD_REQUEST, "Discount unavailable"));
+            Discount discount = assignment.getDiscount();
+            BigDecimal discountValue = discount.getDiscountValue();
+            if (discountValue == null || discountValue.signum() < 0 || discount.getDiscountType() == null
+                    || (discount.getDiscountType() == DiscountType.PERCENTAGE && discountValue.compareTo(new BigDecimal("100")) > 0)) {
+                throw new ApplicationException(EnumCode.BAD_REQUEST, "Invalid discount value");
+            }
+            if (discount.getDiscountType() == DiscountType.PERCENTAGE) {
+                discountAmount = subtotal.multiply(discountValue)
+                        .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+            } else {
+                discountAmount = discountValue;
+            }
+            discountAmount = discountAmount.min(subtotal).setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal shippingFee = new BigDecimal("30000.00");
+        BigDecimal total = subtotal.subtract(discountAmount).add(shippingFee);
+        OrderSummaryResponse summary = new OrderSummaryResponse(subtotal, discountAmount, shippingFee, total);
+        return new Checkout(items, assignment, summary);
     }
 
-    private record OrderLine(
-            CartItem cartItem,
-            ProductVariant productVariant,
-            BigDecimal lineTotal
-    ) {
+    private BigDecimal calculateLineTotal(CartItem item) {
+        return item.getProductVariant().getPrice().multiply(BigDecimal.valueOf(item.getProductQuantity()))
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
-    private record OrderContext(
-            List<OrderLine> lines,
-            OrderSummaryResponse summary
-    ) {
-    }
+    private record Checkout(List<CartItem> items, UserDiscount assignment, OrderSummaryResponse summary) {}
 }

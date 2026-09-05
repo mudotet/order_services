@@ -1,9 +1,6 @@
 package com.example.order_services.dto.response;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -12,8 +9,9 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class CartDetailResponse {
-    private String userId;
+    private String cartId;
     private List<CartItemResponse> items;
     private BigDecimal subtotal;
 }

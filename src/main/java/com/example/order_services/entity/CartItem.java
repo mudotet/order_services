@@ -1,31 +1,24 @@
 package com.example.order_services.entity;
 
 import com.example.order_services.common.BaseEntity;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import jakarta.persistence.*;
+import lombok.*;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
-@Table(
-        name = "cart_items",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_cart_item",
-                columnNames = {"cart_id", "product_variant_id"}
-        )
-)
+@Builder
+@AllArgsConstructor
+@Table(name = "cart_items")
 public class CartItem extends BaseEntity {
-    @Column(name = "cart_id", nullable = false, length = 36)
-    private String cartId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cart_id", nullable = false)
+    private Cart cart;
 
-    @Column(name = "product_variant_id", nullable = false, length = 36)
-    private String productVariantId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "product_variant_id", nullable = false)
+    private ProductVariant productVariant;
 
     @Column(name = "product_quantity", nullable = false)
     private Integer productQuantity;

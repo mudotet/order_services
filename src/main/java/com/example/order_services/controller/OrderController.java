@@ -8,10 +8,7 @@ import com.example.order_services.dto.response.OrderSummaryResponse;
 import com.example.order_services.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -20,16 +17,12 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping("/summary")
-    public BaseResponse<OrderSummaryResponse> calculateSummary(
-            @Valid @RequestBody OrderSummaryRequest request
-    ) {
-        return BaseResponse.success(orderService.calculateSummary(request));
+    public BaseResponse<OrderSummaryResponse> calculateOrderSummary(@Valid @RequestBody OrderSummaryRequest request) {
+        return BaseResponse.success(orderService.calculateOrderSummary(request.getDiscountId()));
     }
 
     @PostMapping
-    public BaseResponse<OrderResponse> createOrder(
-            @Valid @RequestBody CreateOrderRequest request
-    ) {
+    public BaseResponse<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
         return BaseResponse.success(orderService.createOrder(request));
     }
 }

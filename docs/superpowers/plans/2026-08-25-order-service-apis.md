@@ -175,10 +175,10 @@ Use these exact additional entity fields:
 | `CartItem` | `cart_items` | `String cartId`, `String productVariantId`, `Integer productQuantity` |
 | `Discount` | `discounts` | `BigDecimal percentageDiscount` |
 | `OrderState` | `order_states` | `String state` |
-| `OrderEntity` | `orders` | `String userId`, `String discountId`, `String paymentId`, `String addressId`, `String orderStateId`, `BigDecimal subtotal`, `BigDecimal discountAmount`, `BigDecimal shippingFee`, `BigDecimal total` |
+| `Order` | `orders` | `String userId`, `String discountId`, `String paymentId`, `String addressId`, `String orderStateId`, `BigDecimal subtotal`, `BigDecimal discountAmount`, `BigDecimal shippingFee`, `BigDecimal total` |
 | `OrderItem` | `order_items` | `String orderId`, `String productVariantId`, `BigDecimal unitPrice`, `Integer quantity`, `BigDecimal lineTotal` |
 
-All classes use Lombok `@Getter`, `@Setter`, and `@NoArgsConstructor`. Use `@Table(name = "orders")` for `OrderEntity`; never use a bare `Order` class name.
+All classes use Lombok `@Getter`, `@Setter`, and `@NoArgsConstructor`. Use `@Table(name = "orders")` for `Order`; never use a bare `Order` class name.
 
 - [ ] **Step 2: Add active-row repository methods.**
 
@@ -227,7 +227,7 @@ Expected: `BUILD SUCCESS` with all entities and repository query names validated
 - Test: `src/test/java/com/example/order_services/service/InventoryServiceTest.java`
 
 **Interfaces:**
-- Consumes: `InventoryRepository`, `UpdateQuantityRequest`, `InventoryResponse`, `BaseResponse`, and `ApplicationException`.
+- Consumes: `InventoryRepository`, `UpdateCartItemQuantityRequest`, `InventoryResponse`, `BaseResponse`, and `ApplicationException`.
 - Produces: `InventoryService.updateQuantity(String productVariantId, UpdateQuantityRequest request)` and `PUT /api/inventories/{productVariantId}/quantity`.
 
 - [ ] **Step 1: Write the failing service test.**
@@ -461,7 +461,7 @@ Expected: `BUILD SUCCESS` and one passing test.
 - Test: `src/test/java/com/example/order_services/service/OrderServiceTest.java`
 
 **Interfaces:**
-- Consumes: `OrderService.calculateSummary` data, `CreateOrderRequest`, `OrderEntity`, `OrderItem`, `OrderStateRepository`, `OrderRepository`, `OrderItemRepository`, and `InventoryRepository`.
+- Consumes: `OrderService.calculateSummary` data, `CreateOrderRequest`, `Order`, `OrderItem`, `OrderStateRepository`, `OrderRepository`, `OrderItemRepository`, and `InventoryRepository`.
 - Produces: `OrderService.createOrder(CreateOrderRequest request)` and `POST /api/orders`.
 
 - [ ] **Step 1: Write the failing transactional-order test.**
@@ -575,4 +575,4 @@ Expected: exactly five route annotations for the requested APIs and no whitespac
 
 - Spec coverage: Tasks 1–2 create the requested base/error/model/repository/mapper foundation; Tasks 3–6 each cover the five approved endpoints; Task 6 persists the denormalized `discountAmount`; Task 7 verifies the whole result.
 - Placeholder scan: no incomplete implementation instructions or deferred decisions remain.
-- Type consistency: `OrderSummaryRequest`, `CreateOrderRequest`, `OrderSummaryResponse`, and `OrderResponse` use the same field names in controller, service, and tests. `OrderEntity` is the sole mapped order class, avoiding collision with framework types.
+- Type consistency: `OrderSummaryRequest`, `CreateOrderRequest`, `OrderSummaryResponse`, and `OrderResponse` use the same field names in controller, service, and tests. `Order` is the sole mapped order class, avoiding collision with framework types.

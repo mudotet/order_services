@@ -11,6 +11,7 @@ public class BaseResponse<T> {
     private final String code;
     private final String message;
     private final T data;
+    // Give extra info if have
     private final Map<String, ?> metadata;
 
     public static <T> BaseResponse<T> success(T data) {

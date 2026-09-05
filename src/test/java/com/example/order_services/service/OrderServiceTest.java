@@ -1,166 +1,161 @@
 package com.example.order_services.service;
 
+import com.example.order_services.common.DiscountType;
 import com.example.order_services.dto.request.CreateOrderRequest;
-import com.example.order_services.dto.request.OrderSummaryRequest;
-import com.example.order_services.dto.response.OrderResponse;
-import com.example.order_services.dto.response.OrderSummaryResponse;
-import com.example.order_services.entity.Cart;
-import com.example.order_services.entity.CartItem;
-import com.example.order_services.entity.Discount;
-import com.example.order_services.entity.Inventory;
-import com.example.order_services.entity.OrderEntity;
-import com.example.order_services.entity.OrderItem;
-import com.example.order_services.entity.OrderState;
-import com.example.order_services.entity.ProductVariant;
-import com.example.order_services.repository.CartItemRepository;
-import com.example.order_services.repository.CartRepository;
-import com.example.order_services.repository.DiscountRepository;
-import com.example.order_services.repository.InventoryRepository;
-import com.example.order_services.repository.OrderItemRepository;
-import com.example.order_services.repository.OrderRepository;
-import com.example.order_services.repository.OrderStateRepository;
-import com.example.order_services.repository.ProductVariantRepository;
+import com.example.order_services.entity.*;
+import com.example.order_services.exception.ApplicationException;
+import com.example.order_services.repository.*;
 import com.example.order_services.service.impl.OrderServiceImpl;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.ArgumentCaptor;
-import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verify;
+import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
-    @Mock
-    private CartRepository cartRepository;
-    @Mock
-    private CartItemRepository cartItemRepository;
-    @Mock
-    private ProductVariantRepository productVariantRepository;
-    @Mock
-    private DiscountRepository discountRepository;
-    @Mock
-    private InventoryRepository inventoryRepository;
-    @Mock
-    private OrderStateRepository orderStateRepository;
-    @Mock
-    private OrderRepository orderRepository;
-    @Mock
-    private OrderItemRepository orderItemRepository;
-    @InjectMocks
-    private OrderServiceImpl orderService;
+    private final CartRepository carts = mock(CartRepository.class);
+    private final CartItemRepository items = mock(CartItemRepository.class);
+    private final UserDiscountRepository discounts = mock(UserDiscountRepository.class);
+    private final InventoryRepository inventories = mock(InventoryRepository.class);
+    private final OrderStateRepository states = mock(OrderStateRepository.class);
+    private final OrderRepository orders = mock(OrderRepository.class);
+    private final OrderItemRepository orderItems = mock(OrderItemRepository.class);
+    private final UserRepository users = mock(UserRepository.class);
+    private final OrderServiceImpl service = new OrderServiceImpl(carts, items, discounts, inventories, states,
+            orders, orderItems, new CurrentUserService(users));
+    private CartItem item;
+    private Inventory inventory;
+
+    @BeforeEach
+    void setUp() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("alice", null, List.of()));
+        User user = User.builder().userName("alice").build();
+        user.setId("alice-id");
+        when(users.findByUserNameAndDeletedFalse("alice")).thenReturn(Optional.of(user));
+        Cart cart = Cart.builder().user(user).build();
+        cart.setId("cart-id");
+        when(carts.findByUser_IdAndDeletedFalse("alice-id")).thenReturn(Optional.of(cart));
+        when(carts.findByUserIdForUpdate("alice-id")).thenReturn(Optional.of(cart));
+        ProductVariant variant = ProductVariant.builder().price(new BigDecimal("12.50")).build();
+        variant.setId("variant-id");
+        item = CartItem.builder().cart(cart).productVariant(variant).productQuantity(2).build();
+        when(items.findActiveItemsByCartId("cart-id")).thenReturn(List.of(item));
+        inventory = Inventory.builder().productVariant(variant).quantityInStock(3).build();
+        when(inventories.findByProductVariantIdsForUpdate(anyCollection())).thenReturn(List.of(inventory));
+        when(states.findByStateAndDeletedFalse("PENDING")).thenReturn(Optional.of(OrderState.builder().state("PENDING").build()));
+        when(orders.save(any())).thenAnswer(call -> {
+            Order order = call.getArgument(0);
+            order.setId("order-id");
+            return order;
+        });
+    }
+
+    @AfterEach
+    void clearContext() {
+        SecurityContextHolder.clearContext();
+    }
 
     @Test
-    void calculateSummaryAppliesDiscountToCurrentCartPrices() {
-        stubCart("user-1", item("variant-a", 2), item("variant-b", 1));
-        stubVariant("variant-a", "Tea", "10.00");
-        stubVariant("variant-b", "Cake", "5.00");
-        stubDiscount("discount-1", "10.00");
+    void summaryUsesAuthenticatedUsersCartBeforeAnyOrderExists() {
+        assignDiscount(DiscountType.PERCENTAGE, "10");
+        var result = service.calculateOrderSummary("discount-id");
+        assertThat(result.getSubtotal()).isEqualByComparingTo("25.00");
+        assertThat(result.getDiscountAmount()).isEqualByComparingTo("2.50");
+        assertThat(result.getShippingFee()).isEqualByComparingTo("30000.00");
+        assertThat(result.getTotal()).isEqualByComparingTo("30022.50");
+        verifyNoInteractions(orders, orderItems);
+        verify(items, never()).saveAll(any());
+        verify(discounts).findAvailableAssignment("alice-id", "discount-id");
+    }
 
-        OrderSummaryResponse response = orderService.calculateSummary(
-                new OrderSummaryRequest("user-1", "discount-1")
-        );
+    @Test
+    void percentageKeepsPrecisionUntilMoneyIsRounded() {
+        assignDiscount(DiscountType.PERCENTAGE, "12.5");
+        assertThat(service.calculateOrderSummary("discount-id").getDiscountAmount()).isEqualByComparingTo("3.13");
+    }
 
-        assertThat(response.getSubtotal()).isEqualByComparingTo("25.00");
+    @Test
+    void fixedDiscountCannotReduceShippingAndDiscountIsOptional() {
+        assignDiscount(DiscountType.FIXED_AMOUNT, "30");
+        assertThat(service.calculateOrderSummary("discount-id").getTotal()).isEqualByComparingTo("30000.00");
+        assertThat(service.calculateOrderSummary(null).getTotal()).isEqualByComparingTo("30025.00");
+    }
+
+    @Test
+    void rejectsUnavailableDiscountForPreviewAndCreation() {
+        assertThatThrownBy(() -> service.calculateOrderSummary("unavailable-discount"))
+                .isInstanceOf(ApplicationException.class).hasMessage("Discount unavailable");
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderRequest("unavailable-discount", "address-id", "payment-id")))
+                .isInstanceOf(ApplicationException.class).hasMessage("Discount unavailable");
+        verifyNoInteractions(orders, orderItems);
+    }
+
+    @Test
+    void createsOrderWithSameTotalsConsumesDiscountAndClearsOnlyItems() {
+        var assignment = assignDiscount(DiscountType.PERCENTAGE, "10");
+        var preview = service.calculateOrderSummary("discount-id");
+        var response = service.createOrder(new CreateOrderRequest("discount-id", "address-id", "payment-id"));
+        assertThat(response.getTotal()).isEqualByComparingTo(preview.getTotal());
+        assertThat(response.getShippingFee()).isEqualByComparingTo("30000.00");
         assertThat(response.getDiscountAmount()).isEqualByComparingTo("2.50");
-        assertThat(response.getShippingFee()).isEqualByComparingTo("0.00");
-        assertThat(response.getTotal()).isEqualByComparingTo("22.50");
+        assertThat(response.getState()).isEqualTo("PENDING");
+        assertThat(inventory.getQuantityInStock()).isEqualTo(1);
+        assertThat(item.isDeleted()).isTrue();
+        assertThat(assignment.getUsed()).isTrue();
+        verify(discounts, times(2)).findAvailableAssignment("alice-id", "discount-id");
+        verify(orders).save(argThat(order -> order.getUser().getId().equals("alice-id")));
+        verify(orderItems).saveAll(argThat(saved -> {
+            OrderItem first = saved.iterator().next();
+            return first.getQuantity() == 2 && first.getLineTotal().compareTo(new BigDecimal("25.00")) == 0;
+        }));
+        verify(carts, never()).deleteById(any());
     }
 
     @Test
-    void createOrderPersistsDiscountReducesStockAndClearsCart() {
-        CartItem cartItem = item("variant-a", 2);
-        stubCart("user-1", cartItem);
-        stubVariant("variant-a", "Tea", "10.00");
-        stubDiscount("discount-1", "10.00");
-        Inventory inventory = stubInventory("variant-a", 3);
-        stubPendingState();
-        List<OrderItem> savedOrderItems = new ArrayList<>();
-        when(orderRepository.save(org.mockito.ArgumentMatchers.any(OrderEntity.class)))
-                .thenAnswer(invocation -> {
-                    OrderEntity order = invocation.getArgument(0);
-                    order.setId("order-1");
-                    return order;
-                });
-        when(orderItemRepository.saveAll(org.mockito.ArgumentMatchers.anyList()))
-                .thenAnswer(invocation -> {
-                    List<OrderItem> items = invocation.getArgument(0);
-                    savedOrderItems.addAll(items);
-                    return items;
-                });
-
-        OrderResponse response = orderService.createOrder(new CreateOrderRequest(
-                "user-1",
-                "address-1",
-                "payment-1",
-                "discount-1"
-        ));
-
-        ArgumentCaptor<OrderEntity> orderCaptor = ArgumentCaptor.forClass(OrderEntity.class);
-        verify(orderRepository).save(orderCaptor.capture());
-        assertThat(orderCaptor.getValue().getDiscountAmount()).isEqualByComparingTo("2.00");
-        assertThat(savedOrderItems.getFirst().getUnitPrice())
-                .isEqualByComparingTo("10.00");
-        assertThat(response.getTotal()).isEqualByComparingTo("18.00");
-        assertThat(inventory.getQuantityInStock()).isEqualTo(1);
-        assertThat(cartItem.isDeleted()).isTrue();
+    void insufficientStockDoesNotSaveOrder() {
+        inventory.setQuantityInStock(1);
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderRequest(null, "address-id", "payment-id")))
+                .isInstanceOf(ApplicationException.class).hasMessage("Insufficient stock");
+        verifyNoInteractions(orders, orderItems);
+        assertThat(item.isDeleted()).isFalse();
     }
 
-    private CartItem item(String productVariantId, int quantity) {
-        CartItem item = new CartItem();
-        item.setProductVariantId(productVariantId);
-        item.setProductQuantity(quantity);
-        return item;
+    @Test
+    void canRemoveDiscountWhenCreatingAfterPreview() {
+        var assignment = assignDiscount(DiscountType.PERCENTAGE, "10");
+        assertThat(service.calculateOrderSummary("discount-id").getTotal()).isEqualByComparingTo("30022.50");
+        var response = service.createOrder(new CreateOrderRequest(null, "address-id", "payment-id"));
+        assertThat(response.getDiscountAmount()).isEqualByComparingTo("0.00");
+        assertThat(response.getTotal()).isEqualByComparingTo("30025.00");
+        assertThat(assignment.getUsed()).isFalse();
+        verify(orders).save(argThat(order -> order.getDiscount() == null));
+        verify(discounts, never()).save(any());
     }
 
-    private void stubCart(String userId, CartItem... items) {
-        Cart cart = new Cart();
-        cart.setId("cart-1");
-        cart.setUserId(userId);
-        when(cartRepository.findByUserId(userId)).thenReturn(Optional.of(cart));
-        when(cartItemRepository.findAllByCartId("cart-1"))
-                .thenReturn(List.of(items));
+    @Test
+    void duplicateVariantLinesCannotBypassStockCheck() {
+        when(items.findActiveItemsByCartId("cart-id")).thenReturn(List.of(item, item));
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderRequest(null, "address-id", "payment-id")))
+                .isInstanceOf(ApplicationException.class).hasMessage("Insufficient stock");
+        verifyNoInteractions(orders, orderItems);
     }
 
-    private void stubVariant(String id, String name, String price) {
-        ProductVariant variant = new ProductVariant();
-        variant.setId(id);
-        variant.setProductVariant(name);
-        variant.setPrice(new BigDecimal(price));
-        when(productVariantRepository.findById(id))
-                .thenReturn(Optional.of(variant));
-    }
-
-    private void stubDiscount(String id, String percentage) {
-        Discount discount = new Discount();
-        discount.setId(id);
-        discount.setPercentageDiscount(new BigDecimal(percentage));
-        when(discountRepository.findById(id))
-                .thenReturn(Optional.of(discount));
-    }
-
-    private Inventory stubInventory(String productVariantId, int quantity) {
-        Inventory inventory = new Inventory();
-        inventory.setProductVariantId(productVariantId);
-        inventory.setQuantityInStock(quantity);
-        when(inventoryRepository.findByProductVariantId(productVariantId))
-                .thenReturn(Optional.of(inventory));
-        return inventory;
-    }
-
-    private void stubPendingState() {
-        OrderState pending = new OrderState();
-        pending.setId("state-pending");
-        pending.setState("PENDING");
-        when(orderStateRepository.findByState("PENDING"))
-                .thenReturn(Optional.of(pending));
+    private UserDiscount assignDiscount(DiscountType type, String value) {
+        Discount discount = Discount.builder().discountType(type).discountValue(new BigDecimal(value)).build();
+        discount.setId("discount-id");
+        UserDiscount assignment = UserDiscount.builder().discount(discount).used(false).status("AVAILABLE")
+                .receivedAt(LocalDateTime.now().minusDays(1)).expiredAt(LocalDateTime.now().plusDays(1)).build();
+        when(discounts.findAvailableAssignment("alice-id", "discount-id"))
+                .thenReturn(Optional.of(assignment));
+        return assignment;
     }
 }

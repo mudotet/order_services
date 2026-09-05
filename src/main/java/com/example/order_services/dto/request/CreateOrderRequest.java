@@ -1,18 +1,15 @@
 package com.example.order_services.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class CreateOrderRequest {
-    @NotBlank
-    private String userId;
+    private String discountId;
 
     @NotBlank
     private String addressId;
@@ -20,5 +17,4 @@ public class CreateOrderRequest {
     @NotBlank
     private String paymentId;
 
-    private String discountId;
 }

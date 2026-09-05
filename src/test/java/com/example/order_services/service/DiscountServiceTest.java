@@ -1,46 +1,47 @@
 package com.example.order_services.service;
 
-import com.example.order_services.dto.response.DiscountResponse;
-import com.example.order_services.entity.Discount;
-import com.example.order_services.repository.DiscountRepository;
+import com.example.order_services.common.DiscountType;
+import com.example.order_services.entity.*;
+import com.example.order_services.repository.*;
 import com.example.order_services.service.impl.DiscountServiceImpl;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.modelmapper.ModelMapper;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
 class DiscountServiceTest {
-    @Mock
-    private DiscountRepository discountRepository;
-
-    private DiscountServiceImpl discountService;
-
-    @BeforeEach
-    void setUp() {
-        discountService = new DiscountServiceImpl(discountRepository, new ModelMapper());
+    @AfterEach
+    void clearContext() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
-    void getDiscountsReturnsActiveDiscountData() {
-        Discount discount = new Discount();
-        discount.setId("discount-1");
-        discount.setPercentageDiscount(new BigDecimal("10.00"));
-        when(discountRepository.findAll()).thenReturn(List.of(discount));
+    void resolvesUsernameInServiceAndReturnsDiscountId() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken("alice", null, List.of()));
+        UserRepository users = mock(UserRepository.class);
+        User user = User.builder().userName("alice").build();
+        user.setId("alice-id");
+        when(users.findByUserNameAndDeletedFalse("alice")).thenReturn(Optional.of(user));
+        UserDiscountRepository assignments = mock(UserDiscountRepository.class);
+        Discount discount = Discount.builder().discountType(DiscountType.PERCENTAGE).discountValue(new BigDecimal("10")).build();
+        discount.setId("discount-id");
+        when(assignments.findAvailableByUserId("alice-id"))
+                .thenReturn(List.of(UserDiscount.builder().discount(discount).build()));
+        var service = new DiscountServiceImpl(assignments, new CurrentUserService(users));
 
-        List<DiscountResponse> response = discountService.getDiscounts();
+        var result = service.getDiscounts();
 
-        assertThat(response).hasSize(1);
-        assertThat(response.getFirst().getId()).isEqualTo("discount-1");
-        assertThat(response.getFirst().getPercentageDiscount())
-                .isEqualByComparingTo("10.00");
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getDiscountId()).isEqualTo("discount-id");
+        assertThat(result.getFirst().getDiscountType()).isEqualTo("PERCENTAGE");
+        assertThat(result.getFirst().getDiscountValue()).isEqualByComparingTo("10");
     }
 }
