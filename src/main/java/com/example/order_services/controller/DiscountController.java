@@ -16,6 +16,7 @@ import java.util.List;
 public class DiscountController {
     private final DiscountService discountService;
 
+    // api get discounts user have
     @GetMapping
     public BaseResponse<List<DiscountResponse>> getDiscounts() {
         return BaseResponse.success(discountService.getDiscounts());

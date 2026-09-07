@@ -4,6 +4,7 @@ import com.example.order_services.common.BaseResponse;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.OrderSummaryRequest;
 import com.example.order_services.dto.response.OrderResponse;
+import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
 import com.example.order_services.dto.response.OrderSummaryResponse;
 import com.example.order_services.service.OrderService;
 import jakarta.validation.Valid;
@@ -16,13 +17,21 @@ import org.springframework.web.bind.annotation.*;
 public class OrderController {
     private final OrderService orderService;
 
-    @PostMapping("/summary")
+    // api calculate summary before make order
+    @PostMapping("/orders/summary")
     public BaseResponse<OrderSummaryResponse> calculateOrderSummary(@Valid @RequestBody OrderSummaryRequest request) {
         return BaseResponse.success(orderService.calculateOrderSummary(request.getDiscountId()));
     }
 
+    // api create order
     @PostMapping
     public BaseResponse<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
         return BaseResponse.success(orderService.createOrder(request));
+    }
+
+    // api get summary of return orders with total active return, await, refunds
+    @GetMapping("/returns/summary")
+    public BaseResponse<OrderReturnsSummaryResponse> calculateOrderReturnSummary() {
+        return BaseResponse.success(orderService.calculateOrderReturnSummary());
     }
 }

@@ -5,6 +5,7 @@ import com.example.order_services.common.EnumCode;
 import com.example.order_services.common.OrderStatus;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.response.OrderResponse;
+import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
 import com.example.order_services.dto.response.OrderSummaryResponse;
 import com.example.order_services.entity.*;
 import com.example.order_services.exception.ApplicationException;
@@ -26,7 +27,6 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('USER')")
 @Transactional(readOnly = true)
 public class OrderServiceImpl implements OrderService {
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
@@ -38,7 +38,49 @@ public class OrderServiceImpl implements OrderService {
     private final OrderStateRepository orderStateRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final OrderReturnRepository orderReturnRepository;
+    private final OrderReturnItemRepository orderReturnItemRepository;
+
     private final CurrentUserService currentUserService;
+
+
+    @Override
+    public OrderReturnsSummaryResponse calculateOrderReturnSummary() {
+        User user = currentUserService.getCurrentUser();
+        if (!user.getUserName().equals("admin")){
+            throw new ApplicationException(EnumCode.UNAUTHORIZED, "Unauthorized");
+        }
+
+        return OrderReturnsSummaryResponse.builder()
+                .activeReturnChangePercentage(calActiveReturnChangePercentage())
+                .activeReturnCount(calActiveReturnCount())
+                .averageCycleTime(calAverageCycleTime())
+                .awaitInspectionCount(calAwaitInspectionCount())
+                .totalRefunds(calTotalRefunds())
+                .build();
+    }
+
+
+    private Integer calActiveReturnCount() {
+        List<Order> orders =
+    }
+
+    private BigDecimal calTotalRefunds() {
+        return 0;
+    }
+
+    private Integer calAwaitInspectionCount() {
+        return 0;
+    }
+
+    private Integer calAverageCycleTime() {
+        return 0;
+    }
+
+    private Integer calActiveReturnChangePercentage() {
+        return 0;
+    }
+
 
     @Override
     public OrderSummaryResponse calculateOrderSummary(String discountId) {
