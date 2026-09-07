@@ -3,8 +3,10 @@ package com.example.order_services.service.impl;
 import com.example.order_services.common.DiscountType;
 import com.example.order_services.common.EnumCode;
 import com.example.order_services.common.OrderStatus;
+import com.example.order_services.common.OrderReturnStatus;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.response.OrderResponse;
+import com.example.order_services.dto.response.OrderReturnResponse;
 import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
 import com.example.order_services.dto.response.OrderSummaryResponse;
 import com.example.order_services.entity.*;
@@ -13,14 +15,21 @@ import com.example.order_services.repository.*;
 import com.example.order_services.service.CurrentUserService;
 import com.example.order_services.service.OrderService;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -30,6 +39,7 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class OrderServiceImpl implements OrderService {
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
+
 
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
@@ -42,6 +52,8 @@ public class OrderServiceImpl implements OrderService {
     private final OrderReturnItemRepository orderReturnItemRepository;
 
     private final CurrentUserService currentUserService;
+    private final ModelMapper modelMapper;
+    private final UserRepository userRepository;
 
 
     @Override
@@ -61,26 +73,69 @@ public class OrderServiceImpl implements OrderService {
     }
 
 
-    private Integer calActiveReturnCount() {
-        List<Order> orders =
-    }
-
     private BigDecimal calTotalRefunds() {
-        return 0;
+        return orderReturnRepository.getTotalRefundForSpecificQuarter(LocalDateTime.now().getYear(),
+                (LocalDateTime.now().getMonthValue() - 1) / 3 + 1);
     }
 
     private Integer calAwaitInspectionCount() {
-        return 0;
+        return orderReturnRepository.getAwaitInspectionCount();
     }
 
     private Integer calAverageCycleTime() {
-        return 0;
+        List<OrderReturn> completedReturns = orderReturnRepository.getCompleteReturns();
+        if (completedReturns.isEmpty()) {
+            return 0;
+        }
+        long totalHours = completedReturns.stream()
+                .mapToLong(orderReturn -> {
+                    LocalDateTime requestedAt = orderReturn.getRequestedAt();
+                    LocalDateTime refundedAt = orderReturn.getRefundedAt();
+                    return java.time.Duration.between(requestedAt, refundedAt).toHours();
+                })
+                .sum();
+        return (int) Math.round((double) totalHours / completedReturns.size());
     }
 
     private Integer calActiveReturnChangePercentage() {
         return 0;
     }
 
+    private Integer calActiveReturnCount() {
+        return orderReturnRepository.getActiveReturnCount();
+    }
+
+    @Override
+    public Page<OrderReturnResponse> getOrderReturns(int page, int size) {
+        User user = currentUserService.getCurrentUser();
+        if(!user.getUserName().equals("admin")){
+            throw new ApplicationException(EnumCode.UNAUTHORIZED, "Unauthorized");
+        }
+        Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
+
+        List<OrderReturn> orderReturnsPages = orderReturnRepository.findAll(pageable).getContent();
+        Set<String> userIds = orderReturnsPages.stream()
+                .map(orderReturn -> orderReturn.getOrder().getUser().getId())
+                .collect(Collectors.toSet());
+        List<User> users = userRepository.findAllById(userIds);
+        Map<String, User> userMap = users.stream().collect(Collectors.toMap(User::getId, Function.identity()));
+
+        return orderReturnsPages.stream().map(orderReturn ->{
+            User returnUser = userMap.get(orderReturn.getOrder().getUser().getId());
+            LocalDateTime createdAt = orderReturn.getCreatedAt();
+
+            OrderReturnResponse orderReturnResponse = new OrderReturnResponse();
+
+            orderReturnResponse.setReturnId(orderReturn.getId());
+            orderReturnResponse.setInitialTime(orderReturnResponse.calculateInitialTime(createdAt));
+            orderReturnResponse.setCustomerName(returnUser.getUserName());
+            orderReturnResponse.setReasonReturn(orderReturn.);
+            orderReturnResponse.setOriginType(orderReturn.getOriginType());
+            orderReturnResponse.setOrderReturnStatus(
+                    orderReturn.getStatus().name()
+            );
+        });
+    }
 
     @Override
     public OrderSummaryResponse calculateOrderSummary(String discountId) {

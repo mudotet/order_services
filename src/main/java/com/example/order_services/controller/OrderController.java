@@ -4,11 +4,13 @@ import com.example.order_services.common.BaseResponse;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.OrderSummaryRequest;
 import com.example.order_services.dto.response.OrderResponse;
+import com.example.order_services.dto.response.OrderReturnResponse;
 import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
 import com.example.order_services.dto.response.OrderSummaryResponse;
 import com.example.order_services.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -30,8 +32,16 @@ public class OrderController {
     }
 
     // api get summary of return orders with total active return, await, refunds
-    @GetMapping("/returns/summary")
+    @GetMapping("/returns/summary!")
     public BaseResponse<OrderReturnsSummaryResponse> calculateOrderReturnSummary() {
         return BaseResponse.success(orderService.calculateOrderReturnSummary());
+    }
+
+    @GetMapping("/returns")
+    public BaseResponse<Page<OrderReturnResponse>> getOrderReturns(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "4") int size
+    ){
+        return BaseResponse.success(orderService.getOrderReturns(page, size));
     }
 }
