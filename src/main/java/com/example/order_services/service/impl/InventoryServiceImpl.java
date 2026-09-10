@@ -20,12 +20,14 @@ import java.util.List;
 public class InventoryServiceImpl implements InventoryService {
     private final InventoryRepository inventoryRepository;
 
+    /** Admin đặt lại tổng tồn kho của biến thể bằng quantity, không cộng thêm quantity vào tồn cũ. */
     @Override
     @Transactional
     public InventoryResponse updateQuantity(String productVariantId, UpdateInventoryQuantityRequest request) {
         if (request.getQuantity() == null || request.getQuantity() < 0) {
             throw new ApplicationException(EnumCode.BAD_REQUEST, "Inventory quantity must be nonnegative");
         }
+        // Khóa bản ghi kho trong transaction ghi để tránh các cập nhật đồng thời ghi đè nhau.
         Inventory inventory = inventoryRepository.findByProductVariantIdsForUpdate(List.of(productVariantId)).stream()
                 .findFirst().orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Inventory not found"));
         inventory.setQuantityInStock(request.getQuantity());

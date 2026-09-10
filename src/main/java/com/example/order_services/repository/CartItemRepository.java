@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface CartItemRepository extends JpaRepository<CartItem, String> {
+    // Nạp sẵn biến thể/sản phẩm để đọc giá và tên; bỏ các dòng có mục giỏ, biến thể hoặc sản phẩm bị xóa mềm.
     @Query("""
             select item from CartItem item
             join fetch item.productVariant variant

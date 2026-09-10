@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.List;
 
 public interface UserDiscountRepository extends JpaRepository<UserDiscount, String> {
+    // Hai truy vấn cùng lọc lượt cấp mã chưa dùng; điều kiện ngày hiệu lực/hết hạn hiện được hoãn.
     // ponytail: date validation deferred by request; add it to both lookups when implemented.
     @Query("""
             select assignment from UserDiscount assignment

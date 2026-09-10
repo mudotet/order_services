@@ -26,6 +26,7 @@ public class CustomUserDetailsService implements UserDetailsService {
         com.example.order_services.entity.User user = userRepository.findByUserNameAndDeletedFalse(username)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
+        // Spring hasRole("USER"/"ADMIN") đối chiếu authority có tiền tố ROLE_.
         List<GrantedAuthority> authorities = userRoleRepository.findAllByUser_IdAndDeletedFalseAndRole_DeletedFalse(user.getId())
                 .stream()
                 .<GrantedAuthority>map(userRole -> new SimpleGrantedAuthority("ROLE_" + userRole.getRole().getRoleName()))

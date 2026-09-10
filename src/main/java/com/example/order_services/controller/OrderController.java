@@ -3,10 +3,7 @@ package com.example.order_services.controller;
 import com.example.order_services.common.BaseResponse;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.OrderSummaryRequest;
-import com.example.order_services.dto.response.OrderResponse;
-import com.example.order_services.dto.response.OrderReturnResponse;
-import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
-import com.example.order_services.dto.response.OrderSummaryResponse;
+import com.example.order_services.dto.response.*;
 import com.example.order_services.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,7 +29,7 @@ public class OrderController {
     }
 
     // api get summary of return orders with total active return, await, refunds
-    @GetMapping("/returns/summary!")
+    @GetMapping("/returns/summary")
     public BaseResponse<OrderReturnsSummaryResponse> calculateOrderReturnSummary() {
         return BaseResponse.success(orderService.calculateOrderReturnSummary());
     }
@@ -40,8 +37,19 @@ public class OrderController {
     @GetMapping("/returns")
     public BaseResponse<Page<OrderReturnResponse>> getOrderReturns(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "4") int size
+            @RequestParam(defaultValue = "4") int size,
+            @RequestParam String filterBy
     ){
-        return BaseResponse.success(orderService.getOrderReturns(page, size));
+        return BaseResponse.success(orderService.getOrderReturns(page, size, filterBy));
+    }
+
+    @GetMapping("/returns/{id}")
+    public BaseResponse<ViewOrderDetailResponse> viewOrderReturnDetail(@PathVariable String id){
+        return BaseResponse.success(orderService.viewOrderReturnDetail(id));
+    }
+
+    @GetMapping("/returns/export-csv")
+    public BaseResponse<String> exportOrderReturnsToCsv() {
+        return BaseResponse.success(orderService.exportOrderReturnsToCsv());
     }
 }

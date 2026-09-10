@@ -1,10 +1,7 @@
 package com.example.order_services.service;
 
 import com.example.order_services.dto.request.CreateOrderRequest;
-import com.example.order_services.dto.response.OrderResponse;
-import com.example.order_services.dto.response.OrderReturnResponse;
-import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
-import com.example.order_services.dto.response.OrderSummaryResponse;
+import com.example.order_services.dto.response.*;
 import org.springframework.data.domain.Page;
 
 public interface OrderService {
@@ -13,5 +10,9 @@ public interface OrderService {
 
     OrderReturnsSummaryResponse calculateOrderReturnSummary();
 
-    Page<OrderReturnResponse> getOrderReturns(int page, int size);
+    Page<OrderReturnResponse> getOrderReturns(int page, int size, String filterBy);
+
+    ViewOrderDetailResponse viewOrderReturnDetail(String id);
+
+    String exportOrderReturnsToCsv();
 }

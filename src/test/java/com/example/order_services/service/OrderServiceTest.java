@@ -28,9 +28,11 @@ class OrderServiceTest {
     private final OrderStateRepository states = mock(OrderStateRepository.class);
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderItemRepository orderItems = mock(OrderItemRepository.class);
+    private final OrderReturnRepository orderReturns = mock(OrderReturnRepository.class);
+    private final OrderReturnItemRepository returnItems = mock(OrderReturnItemRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final OrderServiceImpl service = new OrderServiceImpl(carts, items, discounts, inventories, states,
-            orders, orderItems, new CurrentUserService(users));
+            orders, orderItems, orderReturns, returnItems, new CurrentUserService(users), mock(org.modelmapper.ModelMapper.class), users);
     private CartItem item;
     private Inventory inventory;
 

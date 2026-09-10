@@ -5,6 +5,7 @@ public enum OrderReturnStatus {
     IN_TRANSIT,
     WAREHOUSE_RECEIVED,
     INSPECTING,
+    RESTOCKED,
     REFUNDED,
     REJECTED
 }
