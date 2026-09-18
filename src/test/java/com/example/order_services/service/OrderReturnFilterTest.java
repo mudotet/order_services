@@ -39,19 +39,19 @@ class OrderReturnFilterTest {
     private final UserRepository users = mock(UserRepository.class);
     private final OrderServiceImpl service = new OrderServiceImpl(
             null, null, null, null, null, null, null,
-            orderReturns, returnItems, new CurrentUserService(users), null, users
+            orderReturns, returnItems, null, new CurrentUserService(users), null, users
     );
 
     @BeforeEach
     void setUp() {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("admin", null, List.of()));
+                new UsernamePasswordAuthenticationToken("admin@example.com", null, List.of()));
 
-        User admin = User.builder().userName("admin").build();
+        User admin = User.builder().userName("admin").email("admin@example.com").build();
         admin.setId("admin-id");
         User customer = User.builder().userName("customer").build();
         customer.setId("customer-id");
-        when(users.findByUserNameAndDeletedFalse("admin")).thenReturn(Optional.of(admin));
+        when(users.findByEmailAndDeletedFalse("admin@example.com")).thenReturn(Optional.of(admin));
         when(users.findAllById(anySet())).thenReturn(List.of(customer));
 
         storedReturns.clear();

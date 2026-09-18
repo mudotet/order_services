@@ -24,10 +24,10 @@ class CartServiceTest {
     @BeforeEach
     void signIn() {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("alice", null, List.of()));
-        User user = User.builder().userName("alice").build();
+                new UsernamePasswordAuthenticationToken("alice@example.com", null, List.of()));
+        User user = User.builder().userName("alice").email("alice@example.com").build();
         user.setId("alice-id");
-        when(users.findByUserNameAndDeletedFalse("alice")).thenReturn(Optional.of(user));
+        when(users.findByEmailAndDeletedFalse("alice@example.com")).thenReturn(Optional.of(user));
     }
 
     @AfterEach

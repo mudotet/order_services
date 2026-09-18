@@ -1,6 +1,6 @@
 # Order tracking information
 
-Status: Implemented; full application validation blocked by existing return-order compilation errors.
+Status: Implemented; tracking HTTP and repository checks pass.
 
 Implement the user's existing `GET /api/orders/tracking/{id}` route through controller, service, and repository queries.
 Reuse `TrackingOrderDetailResponse` and `PurchasedItemResponse`.
@@ -14,4 +14,5 @@ Do not add tracking-log history or new write APIs.
 
 The focused H2 schema test covers repository projections and ownership filters.
 The HTTP integration test covers owner success, another user supplying the order ID, absent orders, deleted orders, anonymous access, and role restrictions.
-The full suite cannot compile because the existing return-order implementation contains `orderReturn.`.
+The return-order implementation now compiles, and the tracking HTTP test passes.
+The full suite still reports separate checkout routing, cart constraint, and transaction failures.

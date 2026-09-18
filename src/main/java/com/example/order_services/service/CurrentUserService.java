@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.AuthenticationTrustResolverImpl;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -13,7 +14,8 @@ import org.springframework.stereotype.Service;
 public class CurrentUserService {
     private final UserRepository userRepository;
 
-    /** Đọc danh tính từ SecurityContext và đối chiếu lại tài khoản chưa bị xóa trong database. */
+    /** Đọc email từ SecurityContext và đối chiếu lại tài khoản chưa bị xóa trong database. */
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'SHIPPER')")
     public User getCurrentUser() {
         var authentication = SecurityContextHolder.getContext().getAuthentication();
         // Anonymous có thể có Authentication, nên cần kiểm tra riêng thay vì chỉ kiểm tra null.
@@ -21,7 +23,7 @@ public class CurrentUserService {
                 || new AuthenticationTrustResolverImpl().isAnonymous(authentication)) {
             throw new AuthenticationCredentialsNotFoundException("Authentication required");
         }
-        return userRepository.findByUserNameAndDeletedFalse(authentication.getName())
+        return userRepository.findByEmailAndDeletedFalse(authentication.getName())
                 .orElseThrow(() -> new AuthenticationCredentialsNotFoundException("User no longer active"));
     }
 }

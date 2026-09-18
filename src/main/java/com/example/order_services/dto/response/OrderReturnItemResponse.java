@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class OrderReturnItemResponse  extends OrderReturnResponse{
+public class OrderReturnItemResponse {
     private String orderItemId;
     private String productVariantId;
     private String productName;

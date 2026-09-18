@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/** Cung cấp các mã giảm giá khả dụng của người dùng đang đăng nhập. */
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('USER')")

@@ -12,6 +12,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -35,7 +36,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(401).body(BaseResponse.error(EnumCode.UNAUTHORIZED, "Authentication required"));
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     ResponseEntity<BaseResponse<Void>> handleInvalidRequestBody() {
         return ResponseEntity.badRequest().body(BaseResponse.error(EnumCode.BAD_REQUEST, "Invalid request body"));
     }

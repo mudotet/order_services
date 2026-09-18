@@ -43,8 +43,8 @@ business APIs; the extra CSRF-token endpoint remains removed.
   persistence, rollback and concurrent checkout must not be considered safe for real orders.
 - Fetch joins load cart item product details; inventory reads use one batch. Queries exclude
   soft-deleted rows. No order-item re-query or per-line price query is needed.
-- Basic authentication keeps CSRF protection through Spring Security's built-in `csrf.spa()`.
-  Existing requests supply the `XSRF-TOKEN` cookie; writes require the matching `X-XSRF-TOKEN` header.
+- CSRF protection is disabled at the user's request for local learning; writes still require authentication and their existing roles.
+  Restore CSRF protection before using cookie-based authentication in production.
 
 ## Validation
 

@@ -32,17 +32,18 @@ class OrderServiceTest {
     private final OrderReturnItemRepository returnItems = mock(OrderReturnItemRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final OrderServiceImpl service = new OrderServiceImpl(carts, items, discounts, inventories, states,
-            orders, orderItems, orderReturns, returnItems, new CurrentUserService(users), mock(org.modelmapper.ModelMapper.class), users);
+            orders, orderItems, orderReturns, returnItems, mock(AddressRepository.class),
+            new CurrentUserService(users), mock(org.modelmapper.ModelMapper.class), users);
     private CartItem item;
     private Inventory inventory;
 
     @BeforeEach
     void setUp() {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("alice", null, List.of()));
-        User user = User.builder().userName("alice").build();
+                new UsernamePasswordAuthenticationToken("alice@example.com", null, List.of()));
+        User user = User.builder().userName("alice").email("alice@example.com").build();
         user.setId("alice-id");
-        when(users.findByUserNameAndDeletedFalse("alice")).thenReturn(Optional.of(user));
+        when(users.findByEmailAndDeletedFalse("alice@example.com")).thenReturn(Optional.of(user));
         Cart cart = Cart.builder().user(user).build();
         cart.setId("cart-id");
         when(carts.findByUser_IdAndDeletedFalse("alice-id")).thenReturn(Optional.of(cart));

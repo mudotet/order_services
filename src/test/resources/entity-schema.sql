@@ -18,6 +18,7 @@ create table users (
 create table addresses (
     id char(36) not null primary key,
     address varchar(500) not null,
+    city varchar(100),
     created_at datetime default CURRENT_TIMESTAMP not null,
     created_by char(36) references users(id),
     updated_at datetime default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP not null,

@@ -1,7 +1,7 @@
 # Checkout API - Postman
 
 Run with JDK 25 and the project's existing MySQL schema. Authentication is HTTP Basic:
-username is `users.user_name`, password is the original password matching its BCrypt hash.
+the Username field contains `users.email`, and the password is the original password matching its BCrypt hash.
 Role names in the database are `USER` / `ADMIN`, without the `ROLE_` prefix.
 
 Learning-stage limitation: the user has deferred restoring the write transaction on `createOrder`.
@@ -21,39 +21,24 @@ used for real orders; a success response does not guarantee that all changes wer
 | PUT | `/api/inventories/{productVariantId}/quantity` | `{"quantity":20}` | ADMIN |
 
 `userId` is no longer accepted as the acting identity in any endpoint.
-The services obtain the username from SecurityContext and look up the user's own resources.
+The services obtain the authenticated email from SecurityContext, resolve the account, and use its database ID to look up the user's own resources.
 The tracking URL accepts an order ID as the selected resource, and the repository checks its owner.
 Product, discount, address and payment IDs identify other selected resources.
 
 Inventory `quantity` is the exact new nonnegative stock level. Cart `quantityChange` is a relative
 change of exactly 1 or -1.
-The table covers checkout, inventory, and order tracking; there is no separate CSRF-token endpoint.
+The table covers checkout, inventory, and order tracking.
 
 ## POST, PUT and PATCH in Postman
 
 1. Set Authorization → Basic Auth on the collection or request.
-2. Call the existing `GET http://localhost:8080/api/carts` using that account.
-3. Preserve the returned `XSRF-TOKEN` cookie in Postman's cookie jar.
-4. Copy that cookie's value into the request header `X-XSRF-TOKEN`.
-5. Send POST/PUT/PATCH with `Content-Type: application/json`, Basic Auth, the token header and cookie.
+2. Send POST/PUT/PATCH with `Content-Type: application/json`, Basic Auth and the request body.
 
-Optional Post-response script on the GET request:
+Alternatively, log in through `POST /api/auth/login` and keep the returned `JSESSIONID` cookie instead of using Basic Auth.
+No token bootstrap request or `X-XSRF-TOKEN` header is required.
+CSRF protection is disabled for local learning and must be restored before production use with cookie-based authentication.
 
-```javascript
-pm.collectionVariables.set("csrfToken", pm.cookies.get("XSRF-TOKEN"));
-```
-
-Then add header `X-XSRF-TOKEN: {{csrfToken}}` to write requests. Fetch a fresh token after changing
-accounts or clearing cookies. GET requests need Basic Auth but no CSRF token. An ADMIN-only account
-receives 403 for the cart GET but still receives the CSRF cookie; it can then update inventory.
-Alternatively, a first POST/PUT/PATCH without a token returns 403 and the cookie; copy its value into
-the header and repeat the request. A cookie without the matching header is not enough.
-
-This uses Spring Security's built-in `csrf.spa()` configuration, with no custom token endpoint
-or filter. See [Spring Security CSRF documentation](https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html#csrf-integration-javascript-spa).
-
-For authorization tests: missing/wrong credentials on GET produce 401; authenticated USER writing
-inventory with a valid CSRF token produces 403; a write without CSRF token also produces 403.
+For authorization tests: missing/wrong credentials produce 401; authenticated USER writing inventory produces 403.
 A foreign, used, revoked or deleted discount produces 400. Discount dates are intentionally
 not checked yet: expired or future-dated assignments are allowed if the other conditions pass.
 

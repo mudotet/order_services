@@ -63,7 +63,7 @@ class EntitySchemaTest {
             Cart cart = Cart.builder().user(user).build();
             session.persist(cart);
             session.persist(CartItem.builder().cart(cart).productVariant(variant).productQuantity(1).build());
-            Address address = Address.builder().address("123 Test Street").build();
+            Address address = Address.builder().address("123 Test Street").city("Hà Nội").build();
             session.persist(address);
             Payment payment = Payment.builder().paymentMethod("CASH").build();
             session.persist(payment);
@@ -120,6 +120,8 @@ class EntitySchemaTest {
             assertThat(tracking.getOrderTrackingId()).isEqualTo(order.getId());
             assertThat(tracking.getOrderTrackingStatus()).isEqualTo("PENDING");
             assertThat(tracking.getShippingAddress()).isEqualTo("123 Test Street");
+            assertThat(tracking.getShippingCity()).isEqualTo("Hà Nội");
+            assertThat(tracking.getEstimatedDelivery()).isEqualTo("2026-09-20");
             assertThat(tracking.getPaymentMethodInfo()).isEqualTo("CASH");
             assertThat(tracking.getTotalAmount()).isEqualByComparingTo("0.00");
             assertThat(orderItems.findPurchasedItems(order.getId(), user.getId())).singleElement().satisfies(purchased -> {

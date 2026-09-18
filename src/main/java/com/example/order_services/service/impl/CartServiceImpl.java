@@ -34,6 +34,7 @@ public class CartServiceImpl implements CartService {
     private final InventoryRepository inventoryRepository;
     private final CurrentUserService currentUserService;
 
+    // Lấy giỏ hàng, tổng tiền và tình trạng tồn kho của người dùng đang đăng nhập.
     @Override
     public CartDetailResponse getCartDetail() {
         User user = currentUserService.getCurrentUser();
@@ -115,11 +116,13 @@ public class CartServiceImpl implements CartService {
         return newQuantity;
     }
 
+    // Tính thành tiền theo giá và số lượng của một dòng giỏ hàng.
     private BigDecimal calculateLineTotal(CartItem item) {
         return item.getProductVariant().getPrice().multiply(BigDecimal.valueOf(item.getProductQuantity()))
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
+    // Ghép tên sản phẩm và biến thể để hiển thị trong giỏ hàng.
     private String buildProductName(ProductVariant variant) {
         return variant.getProduct().getProductName() + " " + variant.getProductVariant();
     }

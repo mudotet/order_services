@@ -1,5 +1,6 @@
 package com.example.order_services.config;
 
+import com.example.order_services.common.Role;
 import com.example.order_services.repository.UserRepository;
 import com.example.order_services.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +13,10 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 @RequiredArgsConstructor
@@ -21,17 +25,22 @@ public class CustomUserDetailsService implements UserDetailsService {
     private final UserRoleRepository userRoleRepository;
 
 
+    // Spring yêu cầu tên hàm loadUserByUsername, nhưng ứng dụng chỉ tìm tài khoản bằng email.
     @Override
-    public UserDetails loadUserByUsername(String username) {
-        com.example.order_services.entity.User user = userRepository.findByUserNameAndDeletedFalse(username)
+    public UserDetails loadUserByUsername(String email) {
+        com.example.order_services.entity.User user = userRepository.findByEmailAndDeletedFalse(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        // Spring hasRole("USER"/"ADMIN") đối chiếu authority có tiền tố ROLE_.
-        List<GrantedAuthority> authorities = userRoleRepository.findAllByUser_IdAndDeletedFalseAndRole_DeletedFalse(user.getId())
+        Set<String> roles = userRoleRepository.findAllByUser_IdAndDeletedFalseAndRole_DeletedFalse(user.getId())
                 .stream()
-                .<GrantedAuthority>map(userRole -> new SimpleGrantedAuthority("ROLE_" + userRole.getRole().getRoleName()))
+                .map(userRole -> userRole.getRole().getRoleName())
+                .collect(Collectors.toSet());
+
+        List<GrantedAuthority> authorities = Arrays.stream(Role.values())
+                .filter(role -> roles.contains(role.name()))
+                .<GrantedAuthority>map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
                 .toList();
 
-        return new User(user.getUserName(), user.getPassword(), authorities);
+        return new User(user.getEmail(), user.getPassword(), authorities);
     }
 }

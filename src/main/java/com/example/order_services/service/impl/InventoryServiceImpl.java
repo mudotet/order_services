@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/** Quản lý số lượng tồn kho dành cho admin. */
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
