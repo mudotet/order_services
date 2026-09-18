@@ -15,4 +15,6 @@ public interface OrderService {
     ViewOrderDetailResponse viewOrderReturnDetail(String id);
 
     String exportOrderReturnsToCsv();
+
+    TrackingOrderDetailResponse getTrackingOrderInfo(String id);
 }

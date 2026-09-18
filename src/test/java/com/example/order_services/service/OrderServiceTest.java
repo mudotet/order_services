@@ -112,7 +112,7 @@ class OrderServiceTest {
         assertThat(response.getState()).isEqualTo("PENDING");
         assertThat(inventory.getQuantityInStock()).isEqualTo(1);
         assertThat(item.isDeleted()).isTrue();
-        assertThat(assignment.getUsed()).isTrue();
+        assertThat(assignment.getUsedAt()).isNotNull();
         verify(discounts, times(2)).findAvailableAssignment("alice-id", "discount-id");
         verify(orders).save(argThat(order -> order.getUser().getId().equals("alice-id")));
         verify(orderItems).saveAll(argThat(saved -> {
@@ -138,7 +138,7 @@ class OrderServiceTest {
         var response = service.createOrder(new CreateOrderRequest(null, "address-id", "payment-id"));
         assertThat(response.getDiscountAmount()).isEqualByComparingTo("0.00");
         assertThat(response.getTotal()).isEqualByComparingTo("30025.00");
-        assertThat(assignment.getUsed()).isFalse();
+        assertThat(assignment.getUsedAt()).isNull();
         verify(orders).save(argThat(order -> order.getDiscount() == null));
         verify(discounts, never()).save(any());
     }
@@ -154,7 +154,7 @@ class OrderServiceTest {
     private UserDiscount assignDiscount(DiscountType type, String value) {
         Discount discount = Discount.builder().discountType(type).discountValue(new BigDecimal(value)).build();
         discount.setId("discount-id");
-        UserDiscount assignment = UserDiscount.builder().discount(discount).used(false).status("AVAILABLE")
+        UserDiscount assignment = UserDiscount.builder().discount(discount).status("AVAILABLE")
                 .receivedAt(LocalDateTime.now().minusDays(1)).expiredAt(LocalDateTime.now().plusDays(1)).build();
         when(discounts.findAvailableAssignment("alice-id", "discount-id"))
                 .thenReturn(Optional.of(assignment));

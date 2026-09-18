@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.EntityGraph;
 
 import java.util.List;
 
-public interface UserRoleRepository extends JpaRepository<UserRole, String> {
+public interface UserRoleRepository extends JpaRepository<UserRole, UserRole.UserRoleId> {
     @EntityGraph(attributePaths = "role")
     List<UserRole> findAllByUser_IdAndDeletedFalseAndRole_DeletedFalse(String userId);
 }

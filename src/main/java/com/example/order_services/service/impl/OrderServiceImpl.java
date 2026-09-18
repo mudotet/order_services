@@ -5,10 +5,7 @@ import com.example.order_services.common.EnumCode;
 import com.example.order_services.common.OrderStatus;
 import com.example.order_services.common.OrderReturnStatus;
 import com.example.order_services.dto.request.CreateOrderRequest;
-import com.example.order_services.dto.response.OrderResponse;
-import com.example.order_services.dto.response.OrderReturnResponse;
-import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
-import com.example.order_services.dto.response.OrderSummaryResponse;
+import com.example.order_services.dto.response.*;
 import com.example.order_services.entity.*;
 import com.example.order_services.exception.ApplicationException;
 import com.example.order_services.repository.*;
@@ -54,7 +51,6 @@ public class OrderServiceImpl implements OrderService {
     private final CurrentUserService currentUserService;
     private final ModelMapper modelMapper;
     private final UserRepository userRepository;
-
 
     @Override
     public OrderReturnsSummaryResponse calculateOrderReturnSummary() {
@@ -200,7 +196,7 @@ public class OrderServiceImpl implements OrderService {
         checkout.items().forEach(item -> item.setDeleted(true));
         cartItemRepository.saveAll(checkout.items());
         if (checkout.assignment() != null) {
-            checkout.assignment().setUsed(true);
+            checkout.assignment().setUsedAt(LocalDateTime.now());
             checkout.assignment().setStatus("USED");
             userDiscountRepository.save(checkout.assignment());
         }
@@ -258,4 +254,17 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private record Checkout(List<CartItem> items, UserDiscount assignment, OrderSummaryResponse summary) {}
+
+
+    /* Tracking Order Infomation */
+
+    @Override
+    @PreAuthorize("hasRole('USER')")
+    public TrackingOrderDetailResponse getTrackingOrderInfo(String orderId) {
+        String userId = currentUserService.getCurrentUser().getId();
+        TrackingOrderDetailResponse tracking = orderRepository.findTrackingOrderInfo(orderId, userId)
+                .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order not found"));
+        tracking.setPurchasedItems(orderItemRepository.findPurchasedItems(orderId, userId));
+        return tracking;
+    }
 }

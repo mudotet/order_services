@@ -3,10 +3,7 @@ package com.example.order_services.controller;
 import com.example.order_services.common.BaseResponse;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.OrderSummaryRequest;
-import com.example.order_services.dto.response.OrderResponse;
-import com.example.order_services.dto.response.OrderReturnResponse;
-import com.example.order_services.dto.response.OrderReturnsSummaryResponse;
-import com.example.order_services.dto.response.OrderSummaryResponse;
+import com.example.order_services.dto.response.*;
 import com.example.order_services.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,5 +40,11 @@ public class OrderController {
             @RequestParam(defaultValue = "4") int size
     ){
         return BaseResponse.success(orderService.getOrderReturns(page, size));
+    }
+
+    // get tracking order information
+    @GetMapping("/tracking/{id}")
+    public BaseResponse<TrackingOrderDetailResponse> getTrackingOrderInfo(@PathVariable String id) {
+        return BaseResponse.success(orderService.getTrackingOrderInfo(id));
     }
 }

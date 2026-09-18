@@ -109,7 +109,49 @@ class CheckoutSecurityIntegrationTest {
     }
 
     @Test
-    void exposesOnlyTheSixRequestedApis() {
+    void trackingReturnsPurchasedPricesAndRejectsOtherUsers() throws Exception {
+        Address address = Address.builder().address("123 Test Street").build();
+        entityManager.persist(address);
+        Payment payment = Payment.builder().paymentMethod("CASH").build();
+        entityManager.persist(payment);
+        Order order = Order.builder().user(alice).addressId(address.getId()).paymentId(payment.getId())
+                .orderState(states.findByStateAndDeletedFalse("PENDING").orElseThrow())
+                .subtotal(new BigDecimal("19.50")).total(new BigDecimal("19.50")).build();
+        entityManager.persist(order);
+        entityManager.persist(OrderItem.builder().order(order).productVariant(variant).quantity(2)
+                .unitPrice(new BigDecimal("9.75")).lineTotal(new BigDecimal("19.50")).build());
+        entityManager.flush();
+        String path = "/api/orders/tracking/" + order.getId();
+
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.orderTrackingId").value(order.getId()))
+                .andExpect(jsonPath("$.data.orderTrackingStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.totalAmount").value(19.50))
+                .andExpect(jsonPath("$.data.shippingAddress").value("123 Test Street"))
+                .andExpect(jsonPath("$.data.paymentMethodInfo").value("CASH"))
+                .andExpect(jsonPath("$.data.purchasedItems.length()").value(1))
+                .andExpect(jsonPath("$.data.purchasedItems[0].purchasedItemName").value("Tea"))
+                .andExpect(jsonPath("$.data.purchasedItems[0].purchasedItemDescription").value("Large"))
+                .andExpect(jsonPath("$.data.purchasedItems[0].purchasedItemQuantity").value(2))
+                .andExpect(jsonPath("$.data.purchasedItems[0].purchasedItemPrice").value(9.75));
+        mvc.perform(get(path).param("userId", alice.getId())
+                        .header(HttpHeaders.AUTHORIZATION, basic("bob", "password")))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.message").value("Order not found"));
+        mvc.perform(get("/api/orders/tracking/missing-order")
+                        .header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.message").value("Order not found"));
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, basic("admin", "password")))
+                .andExpect(status().isForbidden());
+        order.setDeleted(true);
+        entityManager.flush();
+        mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.message").value("Order not found"));
+    }
+
+    @Test
+    void exposesRequestedApis() {
         var mappings = context.getBean("requestMappingHandlerMapping", RequestMappingHandlerMapping.class);
         var routes = mappings.getHandlerMethods().keySet().stream()
                 .flatMap(mapping -> mapping.getPatternValues().stream().filter(path -> path.startsWith("/api/"))
@@ -117,7 +159,8 @@ class CheckoutSecurityIntegrationTest {
                                 .map(method -> method + " " + path))).toList();
         assertThat(routes).containsExactlyInAnyOrder(
                 "GET /api/carts", "GET /api/discounts", "POST /api/orders/summary", "POST /api/orders",
-                "PUT /api/inventories/{productVariantId}/quantity", "PATCH /api/carts/items/{cartItemId}/quantity");
+                "PUT /api/inventories/{productVariantId}/quantity", "PATCH /api/carts/items/{cartItemId}/quantity",
+                "GET /api/orders/tracking/{id}");
     }
 
     @Test
@@ -275,7 +318,7 @@ class CheckoutSecurityIntegrationTest {
         assertThat(inventories.findAll().getFirst().getQuantityInStock()).isEqualTo(8);
         assertThat(items.findActiveItemsByCartId(aliceCart.getId())).isEmpty();
         assertThat(items.findActiveItemsByCartId(carts.findByUser_IdAndDeletedFalse(bob.getId()).orElseThrow().getId())).hasSize(1);
-        assertThat(aliceDiscount.getUsed()).isTrue();
+        assertThat(aliceDiscount.getUsedAt()).isNotNull();
         mvc.perform(withCsrf(post("/api/orders"), "alice").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
         assertThat(orders.count()).isEqualTo(1);
@@ -308,8 +351,8 @@ class CheckoutSecurityIntegrationTest {
             assertThat(order.getShippingFee()).isEqualByComparingTo("30000.00");
             assertThat(order.getTotal()).isEqualByComparingTo("30020.00");
         });
-        assertThat(aliceDiscount.getUsed()).isFalse();
-        assertThat(newSelection.getUsed()).isTrue();
+        assertThat(aliceDiscount.getUsedAt()).isNull();
+        assertThat(newSelection.getUsedAt()).isNotNull();
     }
 
     @Test
@@ -317,7 +360,7 @@ class CheckoutSecurityIntegrationTest {
         UserDiscount expired = assignDiscount(alice);
         expired.setExpiredAt(LocalDateTime.now().minusMinutes(1));
         UserDiscount used = assignDiscount(alice);
-        used.setUsed(true);
+        used.setUsedAt(LocalDateTime.now());
         UserDiscount revoked = assignDiscount(alice);
         revoked.setStatus("REVOKED");
         UserDiscount deleted = assignDiscount(alice);
@@ -410,11 +453,12 @@ class CheckoutSecurityIntegrationTest {
         assertThat(inventories.findAll().getFirst().getQuantityInStock()).isEqualTo(10);
         assertThat(items.findActiveItemsByCartId(aliceCart.getId())).hasSize(1);
         assertThat(userDiscounts.findById(aliceDiscount.getId())
-                .orElseThrow().getUsed()).isFalse();
+                .orElseThrow().getUsedAt()).isNull();
     }
 
     private User createUser(String username, Role role) {
-        User user = users.save(User.builder().userName(username).password(passwordEncoder.encode("password")).build());
+        User user = users.save(User.builder().userName(username).email(username + "@example.com")
+                .password(passwordEncoder.encode("password")).build());
         userRoles.save(UserRole.builder().user(user).role(role).build());
         return user;
     }
@@ -422,7 +466,7 @@ class CheckoutSecurityIntegrationTest {
     private UserDiscount assignDiscount(User user) {
         Discount discount = discounts.save(Discount.builder().discountType(DiscountType.PERCENTAGE)
                 .discountValue(new BigDecimal("10")).build());
-        return userDiscounts.save(UserDiscount.builder().user(user).discount(discount).status("AVAILABLE").used(false)
+        return userDiscounts.save(UserDiscount.builder().user(user).discount(discount).status("AVAILABLE")
                 .receivedAt(LocalDateTime.now().minusDays(1)).expiredAt(LocalDateTime.now().plusDays(1)).build());
     }
 

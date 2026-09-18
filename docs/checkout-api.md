@@ -1,4 +1,4 @@
-# Checkout API — Postman
+# Checkout API - Postman
 
 Run with JDK 25 and the project's existing MySQL schema. Authentication is HTTP Basic:
 username is `users.user_name`, password is the original password matching its BCrypt hash.
@@ -17,15 +17,17 @@ used for real orders; a success response does not guarantee that all changes wer
 | GET | `/api/discounts` | none | USER |
 | POST | `/api/orders/summary` | `{}` or `{"discountId":"…"}` | USER |
 | POST | `/api/orders` | `{"discountId":"…","addressId":"…","paymentId":"…"}` | USER |
+| GET | `/api/orders/tracking/{id}` | none | USER, order owner |
 | PUT | `/api/inventories/{productVariantId}/quantity` | `{"quantity":20}` | ADMIN |
 
-`userId` is no longer accepted as the acting identity in any endpoint. The services obtain the
-username from SecurityContext and look up the user's own resources. Old URLs with user/order IDs
-no longer match a route. Product, discount, address and payment IDs identify selected resources.
+`userId` is no longer accepted as the acting identity in any endpoint.
+The services obtain the username from SecurityContext and look up the user's own resources.
+The tracking URL accepts an order ID as the selected resource, and the repository checks its owner.
+Product, discount, address and payment IDs identify other selected resources.
 
 Inventory `quantity` is the exact new nonnegative stock level. Cart `quantityChange` is a relative
-change of exactly 1 or -1. The user requested this additional cart endpoint after the original five;
-there are now six business routes and still no CSRF-token endpoint.
+change of exactly 1 or -1.
+The table covers checkout, inventory, and order tracking; there is no separate CSRF-token endpoint.
 
 ## POST, PUT and PATCH in Postman
 
@@ -100,6 +102,19 @@ summary endpoint again with the newly selected `discountId`.
 
 Run all tests with `JAVA_HOME` pointing to JDK 25: `./mvnw clean test`.
 
-Before using real data, confirm the discount statuses (`AVAILABLE` / `USED`) and boolean `used_at`
-mapping match your DB. Address/payment ownership still requires their schema; this change does
-not claim those IDs belong to the authenticated user. See `.scratch/secure-checkout/spec.md`.
+Discount statuses remain `AVAILABLE` / `USED`.
+The supplied schema defines `used_at` as a nullable datetime: null means unused, and checkout records the consumption time.
+Address and payment entities now match the supplied schema, which has no owner column on either table.
+Their IDs are still accepted by checkout, with existence enforced by the database foreign keys.
+
+## Order tracking
+
+`GET /api/orders/tracking/{id}` accepts the order ID and returns `TrackingOrderDetailResponse` inside `BaseResponse.data`.
+The response contains the order ID, current order state, purchased items, stored total, shipping address, and payment method.
+Each item's price is the unit price saved on the order item, and its description is the product variant name.
+An absent payment returns null, and an order without active items returns an empty list.
+The caller must have the `USER` role and own the order.
+The service resolves the current user; both repository queries enforce ownership and exclude deleted orders and items.
+Missing, deleted, and other users' orders all return 404 with `Order not found`.
+Anonymous requests return 401, and callers without the `USER` role return 403.
+Possession of an order ID does not grant access.

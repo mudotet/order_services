@@ -12,7 +12,11 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(name = "order_items")
+@Table(name = "order_items", check = {
+        @CheckConstraint(name = "chk_order_items_unit_price", constraint = "unit_price >= 0"),
+        @CheckConstraint(name = "chk_order_items_quantity", constraint = "quantity > 0"),
+        @CheckConstraint(name = "chk_order_items_line_total", constraint = "line_total >= 0")
+})
 public class OrderItem extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
@@ -22,12 +26,12 @@ public class OrderItem extends BaseEntity {
     @JoinColumn(name = "product_variant_id", nullable = false)
     private ProductVariant productVariant;
 
-    @Column(name = "unit_price", nullable = false)
+    @Column(name = "unit_price", nullable = false, precision = 15, scale = 2)
     private BigDecimal unitPrice;
 
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
-    @Column(name = "line_total", nullable = false)
+    @Column(name = "line_total", nullable = false, precision = 15, scale = 2)
     private BigDecimal lineTotal;
 }
