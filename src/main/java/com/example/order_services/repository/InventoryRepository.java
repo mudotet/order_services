@@ -2,6 +2,8 @@ package com.example.order_services.repository;
 
 import com.example.order_services.entity.Inventory;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +19,7 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
     @EntityGraph(attributePaths = "productVariant")
     List<Inventory> findAllByProductVariantIdInAndDeletedFalse(Collection<String> productVariantIds);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select inventory from Inventory inventory
             join fetch inventory.productVariant variant
@@ -51,4 +54,25 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
             """
     )
     BigInteger countTotalProductAboutToOutOfStock();
+
+    @Query(value = """
+            select inventory from Inventory inventory
+            join fetch inventory.productVariant variant
+            join fetch variant.product product
+            where inventory.deleted = false
+              and variant.deleted = false
+              and product.deleted = false
+              and lower(product.productName) like lower(concat('%', :query, '%'))
+            order by product.productName, variant.id
+            """, countQuery = """
+            select count(inventory.id) from Inventory inventory
+            join inventory.productVariant variant
+            join variant.product product
+            where inventory.deleted = false
+              and variant.deleted = false
+              and product.deleted = false
+              and lower(product.productName) like lower(concat('%', :query, '%'))
+            """)
+    Page<Inventory> findProductsInventoryByName(@Param("query") String query, Pageable pageable);
+
 }
