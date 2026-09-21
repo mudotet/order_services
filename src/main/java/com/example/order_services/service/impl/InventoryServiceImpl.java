@@ -2,6 +2,7 @@ package com.example.order_services.service.impl;
 
 import com.example.order_services.common.EnumCode;
 import com.example.order_services.dto.request.UpdateInventoryQuantityRequest;
+import com.example.order_services.dto.response.GeneralnventoryResponse;
 import com.example.order_services.dto.response.InventoryResponse;
 import com.example.order_services.entity.Inventory;
 import com.example.order_services.exception.ApplicationException;
@@ -20,6 +21,8 @@ import java.util.List;
 public class InventoryServiceImpl implements InventoryService {
     private final InventoryRepository inventoryRepository;
 
+
+    // Update the quantity of a product variant in the inventory
     @Override
     @Transactional
     public InventoryResponse updateQuantity(String productVariantId, UpdateInventoryQuantityRequest request) {
@@ -32,4 +35,22 @@ public class InventoryServiceImpl implements InventoryService {
         inventoryRepository.save(inventory);
         return new InventoryResponse(inventory.getId(), productVariantId, inventory.getQuantityInStock());
     }
+
+
+    // Get general infomation
+    @Override
+    public GeneralnventoryResponse getGeneralInventoryInfo() {
+        // Implementation for getting general inventory information
+        if (inventoryRepository.findAll().isEmpty()){
+            throw new ApplicationException(EnumCode.NOT_FOUND, "Inventory has nothing");
+        }
+
+        return GeneralnventoryResponse.builder()
+                .totalInventoryValue(inventoryRepository.countTotalInventoryValue())
+                .totalProductsInStock(inventoryRepository.countTotalProductInInventory())
+                .totalProductsPrepareToOutOfStock(inventoryRepository.countTotalProductAboutToOutOfStock())
+                .build();
+    }
+
+    // findProduct in stock with filter
 }
