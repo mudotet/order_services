@@ -5,7 +5,6 @@ import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.support.ExcelTypeEnum;
 import com.alibaba.excel.write.metadata.WriteSheet;
 import com.example.order_services.common.DiscountType;
-import com.example.order_services.common.DeliveryZone;
 import com.example.order_services.common.EnumCode;
 import com.example.order_services.common.OrderStatus;
 import com.example.order_services.dto.request.CreateOrderRequest;
@@ -26,7 +25,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.annotation.Isolation;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -68,7 +66,6 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemRepository orderItemRepository;
     private final OrderReturnRepository orderReturnRepository;
     private final OrderReturnItemRepository orderReturnItemRepository;
-    private final AddressRepository addressRepository;
 
     private final CurrentUserService currentUserService;
     private final ModelMapper modelMapper;
@@ -89,24 +86,17 @@ public class OrderServiceImpl implements OrderService {
             tracking.setDaysRemaining(null);
         } else if (OrderStatus.DELIVERED.name().equals(tracking.getOrderTrackingStatus())) {
             tracking.setDaysRemaining(0);
-        } else {
-            LocalDate today = LocalDate.now(DELIVERY_TIME_ZONE);
-            if (tracking.getEstimatedDelivery() == null
-                    && tracking.getShippingCity() != null && !tracking.getShippingCity().isBlank()) {
-                tracking.setEstimatedDelivery(today.plusDays(
-                        DeliveryZone.fromCity(tracking.getShippingCity()).getShippingDays()));
-            }
-            if (tracking.getEstimatedDelivery() != null) {
-                tracking.setDaysRemaining(Math.toIntExact(Math.max(0, ChronoUnit.DAYS.between(
-                        today, tracking.getEstimatedDelivery()))));
-            }
+        } else if (tracking.getEstimatedDelivery() != null) {
+            tracking.setDaysRemaining(Math.toIntExact(Math.max(0, ChronoUnit.DAYS.between(
+                    LocalDate.now(DELIVERY_TIME_ZONE), tracking.getEstimatedDelivery()))));
         }
         return tracking;
     }
 
-    // Admin chuyển trạng thái; ngày bắt đầu xử lý cộng số ngày vận chuyển là ngày giao dự kiến.
+    // Admin chuyển trạng thái, giữ nguyên ngày giao dự kiến đã lưu.
     @Override
     @PreAuthorize("hasRole('ADMIN')")
+    @Transactional
     public void updateOrderState(String id, UpdateOrderStateRequest request) {
         User admin = currentUserService.getCurrentUser();
         Order order = orderRepository.findByIdAndDeletedFalse(id)
@@ -128,17 +118,6 @@ public class OrderServiceImpl implements OrderService {
         }
         OrderState state = orderStateRepository.findByStateAndDeletedFalse(next.name())
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order state not found"));
-        if (next == OrderStatus.PROCESSING) {
-            Address address = addressRepository.findByIdAndDeletedFalse(order.getAddressId())
-                    .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Address not found"));
-            if (address.getCity() == null || address.getCity().isBlank()) {
-                throw new ApplicationException(EnumCode.BAD_REQUEST, "Address city is required before processing");
-            }
-            order.setEstimatedDelivery(LocalDate.now(DELIVERY_TIME_ZONE)
-                    .plusDays(DeliveryZone.fromCity(address.getCity()).getShippingDays()));
-        } else if (next == OrderStatus.CANCELLED) {
-            order.setEstimatedDelivery(null);
-        }
         order.setOrderState(state);
         order.setUpdatedBy(admin.getId());
         orderRepository.save(order);

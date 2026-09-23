@@ -117,12 +117,13 @@ class CheckoutSecurityIntegrationTest {
     }
 
     @Test
-    void deliveryEstimateStartsAtProcessingAndDoesNotMoveOnRetries() throws Exception {
+    void stateChangesPreserveSavedDeliveryDateAndTrackingCalculatesRemainingDays() throws Exception {
         states.save(OrderState.builder().state("PROCESSING").build());
         states.save(OrderState.builder().state("SHIPPING").build());
         states.save(OrderState.builder().state("DELIVERED").build());
-        for (var destination : Map.of("  HÀ   NỘI ", 1, "Hồ Chí Minh", 1, "Đồng Nai", 2, "Cần Thơ", 3).entrySet()) {
-            Address address = Address.builder().address("123 Test Street").city(destination.getKey()).build();
+        states.save(OrderState.builder().state("CANCELLED").build());
+        for (String city : List.of("Hà Nội", "Cần Thơ")) {
+            Address address = Address.builder().address("123 Test Street").city(city).build();
             entityManager.persist(address);
             Payment payment = Payment.builder().paymentMethod("CASH").build();
             entityManager.persist(payment);
@@ -136,9 +137,12 @@ class CheckoutSecurityIntegrationTest {
             LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
             mvc.perform(get(trackingPath).header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.estimatedDelivery").value(today.plusDays(destination.getValue()).toString()))
-                    .andExpect(jsonPath("$.data.daysRemaining").value(destination.getValue()));
+                    .andExpect(jsonPath("$.data.estimatedDelivery").value(org.hamcrest.Matchers.nullValue()))
+                    .andExpect(jsonPath("$.data.daysRemaining").value(org.hamcrest.Matchers.nullValue()));
             assertThat(orders.findById(order.getId()).orElseThrow().getEstimatedDelivery()).isNull();
+
+            order.setEstimatedDelivery(today.plusDays(7));
+            entityManager.flush();
 
             mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON)
                             .content("{\"state\":\"PENDING\"}"))
@@ -159,9 +163,9 @@ class CheckoutSecurityIntegrationTest {
                     .andExpect(jsonPath("$.data.totalAmount").value(0))
                     .andExpect(jsonPath("$.data.shippingAddress").value("123 Test Street"))
                     .andExpect(jsonPath("$.data.paymentMethodInfo").value("CASH"))
-                    .andExpect(jsonPath("$.data.shippingCity").value(destination.getKey()))
-                    .andExpect(jsonPath("$.data.estimatedDelivery").value(today.plusDays(destination.getValue()).toString()))
-                    .andExpect(jsonPath("$.data.daysRemaining").value(destination.getValue()));
+                    .andExpect(jsonPath("$.data.shippingCity").value(city))
+                    .andExpect(jsonPath("$.data.estimatedDelivery").value(today.plusDays(7).toString()))
+                    .andExpect(jsonPath("$.data.daysRemaining").value(7));
 
             orders.findById(order.getId()).orElseThrow().setEstimatedDelivery(today.plusDays(7));
             entityManager.flush();
@@ -186,11 +190,22 @@ class CheckoutSecurityIntegrationTest {
                         .andExpect(jsonPath("$.data.estimatedDelivery").value(today.minusDays(1).toString()))
                         .andExpect(jsonPath("$.data.daysRemaining").value(0));
             }
+            Order cancelled = orders.save(Order.builder().user(alice).addressId(address.getId())
+                    .paymentId(payment.getId()).estimatedDelivery(today.plusDays(7))
+                    .orderState(states.findByStateAndDeletedFalse("PENDING").orElseThrow()).build());
+            mvc.perform(authenticated(patch("/api/orders/tracking/" + cancelled.getId() + "/state"), "admin")
+                            .contentType(MediaType.APPLICATION_JSON).content("{\"state\":\"CANCELLED\"}"))
+                    .andExpect(status().isOk());
+            entityManager.flush();
+            entityManager.clear();
+            assertThat(orders.findById(cancelled.getId()).orElseThrow().getEstimatedDelivery())
+                    .isEqualTo(today.plusDays(7));
         }
     }
 
     @Test
-    void deliveryStateUpdatesRequireAdminValidCityAndForwardTransitions() throws Exception {
+    @DirtiesContext
+    void stateUpdatesPersistWithoutCityAndRequireAdminAndForwardTransitions() throws Exception {
         states.save(OrderState.builder().state("PROCESSING").build());
         states.save(OrderState.builder().state("CANCELLED").build());
         Address address = Address.builder().address("123 Test Street").build();
@@ -201,22 +216,29 @@ class CheckoutSecurityIntegrationTest {
                 .paymentId(payment.getId())
                 .orderState(states.findByStateAndDeletedFalse("PENDING").orElseThrow()).build());
         entityManager.flush();
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
         String statePath = "/api/orders/tracking/" + order.getId() + "/state";
         mvc.perform(authenticated(patch(statePath), "alice").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"state\":\"PROCESSING\"}"))
                 .andExpect(status().isForbidden());
-        for (String body : List.of("{}", "{\"state\":\"UNKNOWN\"}", "{\"state\":\"SHIPPING\"}", "{\"state\":\"PROCESSING\"}")) {
+        for (String body : List.of("{}", "{\"state\":\"UNKNOWN\"}", "{\"state\":\"SHIPPING\"}")) {
             mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isBadRequest());
         }
         assertThat(order.getOrderState().getState()).isEqualTo("PENDING");
         assertThat(order.getEstimatedDelivery()).isNull();
-        address.setCity("Hà Nội");
-        entityManager.flush();
         for (String next : List.of("PROCESSING", "CANCELLED")) {
             mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON)
                             .content("{\"state\":\"" + next + "\"}"))
                     .andExpect(status().isOk());
+            Order savedOrder = orders.findById(order.getId()).orElseThrow();
+            mvc.perform(get("/api/orders/tracking/" + order.getId())
+                            .header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.orderTrackingStatus").value(next));
+            assertThat(savedOrder.getEstimatedDelivery()).isNull();
+            assertThat(savedOrder.getUpdatedBy()).isNotNull();
         }
         mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"state\":\"CANCELLED\"}"))

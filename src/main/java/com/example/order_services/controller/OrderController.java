@@ -78,7 +78,7 @@ public class OrderController {
         return BaseResponse.success(orderService.getTrackingOrderInfo(id));
     }
 
-    // Admin cập nhật trạng thái đơn, bắt đầu xử lý sẽ ghi ngày giao dự kiến.
+    // Admin cập nhật trạng thái đơn, giữ nguyên ngày giao dự kiến.
     @PatchMapping("/tracking/{id}/state")
     public BaseResponse<Void> updateOrderState(@PathVariable String id,
                                              @Valid @RequestBody UpdateOrderStateRequest request) {

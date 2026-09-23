@@ -39,7 +39,7 @@ class OrderReturnFilterTest {
     private final UserRepository users = mock(UserRepository.class);
     private final OrderServiceImpl service = new OrderServiceImpl(
             null, null, null, null, null, null, null,
-            orderReturns, returnItems, null, new CurrentUserService(users), null, users
+            orderReturns, returnItems, new CurrentUserService(users), null, users
     );
 
     @BeforeEach
