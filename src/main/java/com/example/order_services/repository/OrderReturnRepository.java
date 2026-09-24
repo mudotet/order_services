@@ -15,7 +15,7 @@ import java.util.Optional;
 
 public interface OrderReturnRepository extends JpaRepository<OrderReturn, String> {
 
-    // Cursor theo ID giảm dần; List tránh truy vấn COUNT và không tải entity.
+    // Use a cursor with descending IDs; returning a List avoids a COUNT query, and the projection avoids loading entities.
     @Query("""
             SELECT new com.example.order_services.dto.response.ExportOrderReturn(
                 r.id, r.createdAt, u.userName, r.originType, r.status)
@@ -28,19 +28,19 @@ public interface OrderReturnRepository extends JpaRepository<OrderReturn, String
                                           @Param("cursorId") String cursorId,
                                           Pageable pageable);
 
-    // Lấy danh sách đơn trả hàng chưa xóa, kèm thông tin khách hàng.
+    // Fetch non-deleted order returns with customer details.
     @EntityGraph(attributePaths = "order.user")
     Page<OrderReturn> findAllByDeletedFalse(Pageable pageable);
 
-    // Tìm kiếm order return theo pageable và trạng thái, chỉ lấy những order return chưa bị xóa.
+    // Search order returns by pagination and status, including only non-deleted returns.
     @EntityGraph(attributePaths = "order.user")
     Page<OrderReturn> findAllByStatusAndDeletedFalse(String status, Pageable pageable);
 
-    // Tìm đơn trả hàng chưa xóa theo ID.
+    // Find a non-deleted order return by ID.
     @EntityGraph(attributePaths = "order.user")
     Optional<OrderReturn> findByIdAndDeletedFalse(String id);
 
-    // Hiện chỉ cộng trạng thái APPROVED theo quý hoàn tiền; SUM có thể trả null khi không có dữ liệu.
+    // Currently sum only APPROVED returns by refund quarter; SUM may return null when there is no data.
     @Query("SELECT SUM(o.refundAmount) FROM OrderReturn o " +
             "WHERE o.status = 'APPROVED' " +
             "AND o.deleted = false " +
@@ -48,14 +48,14 @@ public interface OrderReturnRepository extends JpaRepository<OrderReturn, String
             "AND EXTRACT(QUARTER FROM o.refundedAt) = :quarter")
     BigDecimal getTotalRefundForSpecificQuarter(@Param("year") int year, @Param("quarter") int quarter);
 
-    // Tên phương thức là await inspection, nhưng điều kiện hiện đếm trạng thái INSPECTING.
+    // The method name refers to awaiting inspection, but the condition currently counts the INSPECTING status.
     @Query("SELECT COUNT(o) FROM OrderReturn o WHERE o.status = 'INSPECTING' AND o.deleted = false")
     Integer getAwaitInspectionCount();
 
     @Query("SELECT o FROM OrderReturn o WHERE o.status = 'REFUNDED' AND o.deleted = false AND o.requestedAt != null AND o.refundedAt != null")
     List<OrderReturn> getCompleteReturns();
 
-    // Các trạng thái này được xem là lượt trả còn đang xử lý trong thống kê.
+    // These statuses count as returns still being processed in the statistics.
     @Query("SELECT COUNT(o) FROM OrderReturn o WHERE o.status IN ('PENDING', 'IN_TRANSIT', 'WAREHOUSE_RECEIVED', 'INSPECTING') AND o.deleted = false")
     Integer getActiveReturnCount();
 

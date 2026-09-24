@@ -2,6 +2,7 @@ package com.example.order_services;
 
 import com.example.order_services.entity.*;
 import jakarta.persistence.EntityManager;
+import org.hibernate.SessionFactory;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -24,6 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -135,6 +138,64 @@ class OrderReturnsIntegrationTest {
         mvc.perform(get("/api/orders/returns/" + pending.getId()).header(HttpHeaders.AUTHORIZATION, basic("manager")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.items").isEmpty())
                 .andExpect(jsonPath("$.data.reasonReturn").value(""));
+    }
+
+    @Test
+    void returnQueriesDoNotGrowWithDistinctCustomersAndProducts() throws Exception {
+        var statistics = entityManager.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        statistics.setStatisticsEnabled(true);
+        try {
+            Map<String, Long> queryCounts = new LinkedHashMap<>();
+            for (String path : List.of("/api/orders/returns?size=100",
+                    "/api/orders/returns?size=100&filterBy=PENDING",
+                    "/api/orders/returns/" + pending.getId(), "/api/orders/return/export")) {
+                entityManager.clear();
+                statistics.clear();
+                mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, basic("manager")))
+                        .andExpect(status().isOk());
+                queryCounts.put(path, statistics.getPrepareStatementCount());
+            }
+
+            OrderReturn existingReturn = entityManager.find(OrderReturn.class, pending.getId());
+            Order existingOrder = existingReturn.getOrder();
+            for (int i = 0; i < 8; i++) {
+                User customer = User.builder().userName("Customer " + i).email("query-" + i + "@example.com")
+                        .password("unused").build();
+                entityManager.persist(customer);
+                Order order = Order.builder().user(customer).addressId(existingOrder.getAddressId())
+                        .orderState(existingOrder.getOrderState()).build();
+                entityManager.persist(order);
+                OrderReturn extra = createReturn(order, "QUERY-" + i, "PENDING", 90);
+                Product product = Product.builder().productName("Product " + i).build();
+                entityManager.persist(product);
+                ProductVariant variant = ProductVariant.builder().product(product).productVariant("Standard")
+                        .price(BigDecimal.ONE).build();
+                entityManager.persist(variant);
+                for (OrderReturn target : List.of(existingReturn, extra)) {
+                    OrderItem item = OrderItem.builder().order(target.getOrder()).productVariant(variant)
+                            .quantity(1).unitPrice(BigDecimal.ONE).lineTotal(BigDecimal.ONE).build();
+                    entityManager.persist(item);
+                    entityManager.persist(OrderReturnItem.builder().orderReturn(target).orderItem(item)
+                            .quantity(1).reasonType("DAMAGED").unitPrice(BigDecimal.ONE)
+                            .refundAmount(BigDecimal.ONE).build());
+                }
+            }
+            entityManager.flush();
+
+            for (var entry : queryCounts.entrySet()) {
+                // Clear the first-level cache so it cannot hide lazy-loading queries.
+                entityManager.clear();
+                statistics.clear();
+                mvc.perform(get(entry.getKey()).header(HttpHeaders.AUTHORIZATION, basic("manager")))
+                        .andExpect(status().isOk());
+                assertThat(statistics.getPrepareStatementCount()).as("SQL statements for %s", entry.getKey())
+                        .isEqualTo(entry.getValue());
+                assertThat(statistics.getEntityFetchCount()).as("Lazy entity fetches for %s", entry.getKey())
+                        .isZero();
+            }
+        } finally {
+            statistics.setStatisticsEnabled(false);
+        }
     }
 
     @Test

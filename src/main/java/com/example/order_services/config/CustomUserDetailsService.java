@@ -25,7 +25,7 @@ public class CustomUserDetailsService implements UserDetailsService {
     private final UserRoleRepository userRoleRepository;
 
 
-    // Spring yêu cầu tên hàm loadUserByUsername, nhưng ứng dụng chỉ tìm tài khoản bằng email.
+    // Spring requires the method name loadUserByUsername, but this application looks up accounts by email only.
     @Override
     public UserDetails loadUserByUsername(String email) {
         com.example.order_services.entity.User user = userRepository.findByEmailAndDeletedFalse(email)

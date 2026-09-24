@@ -41,7 +41,7 @@ public class OrderController {
         return BaseResponse.success(orderService.calculateOrderReturnSummary());
     }
 
-    // API lấy danh sách đơn trả hàng.
+    // API to retrieve the list of order returns.
     @GetMapping("/returns")
     public BaseResponse<Page<OrderReturnResponse>> getOrderReturns(
             @RequestParam(defaultValue = "0") int page,
@@ -51,7 +51,7 @@ public class OrderController {
         return BaseResponse.success(orderService.getOrderReturns(page, size, filterBy));
     }
 
-    // API lấy chi tiết đơn trả hàng theo returnId.
+    // API to retrieve order return details by returnId.
     @GetMapping("/returns/{id}")
     public BaseResponse<ViewOrderDetailResponse> viewOrderReturnDetail(@PathVariable String id) {
         return BaseResponse.success(orderService.viewOrderReturnDetail(id));
@@ -78,7 +78,7 @@ public class OrderController {
         return BaseResponse.success(orderService.getTrackingOrderInfo(id));
     }
 
-    // Admin cập nhật trạng thái đơn, giữ nguyên ngày giao dự kiến.
+    // Allow admins to update the order status while preserving the estimated delivery date.
     @PatchMapping("/tracking/{id}/state")
     public BaseResponse<Void> updateOrderState(@PathVariable String id,
                                              @Valid @RequestBody UpdateOrderStateRequest request) {

@@ -47,7 +47,7 @@ import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Xử lý đặt hàng cho người dùng và quản lý đơn trả hàng cho admin. */
+/** Handle order placement for users and order return management for admins. */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -73,7 +73,7 @@ public class OrderServiceImpl implements OrderService {
 
 
 
-    // Lấy thông tin theo dõi đơn hàng thuộc người dùng đang đăng nhập.
+    // Fetch tracking information for an order belonging to the signed-in user.
     @Override
     @PreAuthorize("hasRole('USER')")
     public TrackingOrderDetailResponse getTrackingOrderInfo(String orderId) {
@@ -93,7 +93,7 @@ public class OrderServiceImpl implements OrderService {
         return tracking;
     }
 
-    // Admin chuyển trạng thái, giữ nguyên ngày giao dự kiến đã lưu.
+    // Allow admins to change the status while preserving the stored estimated delivery date.
     @Override
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional
@@ -123,7 +123,7 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
     }
 
-    // Tổng hợp số lượng và tiền hoàn của các đơn trả hàng cho admin.
+    // Summarize order return counts and refund amounts for admins.
     @Override
     @PreAuthorize("hasRole('ADMIN')")
     public OrderReturnsSummaryResponse calculateOrderReturnSummary() {
@@ -139,18 +139,18 @@ public class OrderServiceImpl implements OrderService {
     }
 
 
-    // Lấy tổng tiền hoàn theo quý hiện tại.
+    // Get the total refund amount for the current quarter.
     private BigDecimal calTotalRefunds() {
         return orderReturnRepository.getTotalRefundForSpecificQuarter(LocalDateTime.now().getYear(),
                 (LocalDateTime.now().getMonthValue() - 1) / 3 + 1);
     }
 
-    // Đếm các đơn đang kiểm tra theo truy vấn thống kê.
+    // Count returns under inspection using the statistics query.
     private Integer calAwaitInspectionCount() {
         return orderReturnRepository.getAwaitInspectionCount();
     }
 
-    // Tính số giờ trung bình từ lúc yêu cầu trả hàng đến khi hoàn tiền.
+    // Calculate the average number of hours from the return request to the refund.
     private Integer calAverageCycleTime() {
         List<OrderReturn> completedReturns = orderReturnRepository.getCompleteReturns();
         if (completedReturns.isEmpty()) {
@@ -166,17 +166,17 @@ public class OrderServiceImpl implements OrderService {
         return (int) Math.round((double) totalHours / completedReturns.size());
     }
 
-    // Tạm trả 0 khi chưa triển khai so sánh số đơn trả hàng giữa các kỳ.
+    // Return 0 until the comparison of return counts between periods is implemented.
     private Integer calActiveReturnChangePercentage() {
         return 0;
     }
 
-    // Đếm các đơn trả hàng vẫn đang được xử lý.
+    // Count order returns that are still being processed.
     private Integer calActiveReturnCount() {
         return orderReturnRepository.getActiveReturnCount();
     }
 
-    // Tính tạm tính, giảm giá, phí vận chuyển và tổng tiền từ giỏ của người dùng.
+    // Calculate the subtotal, discount, shipping fee, and total from the user's cart.
     @Override
     @PreAuthorize("hasRole('USER')")
     public OrderSummaryResponse calculateOrderSummary(String discountId) {
@@ -186,7 +186,7 @@ public class OrderServiceImpl implements OrderService {
         return loadCheckout(user.getId(), cart, discountId).getSummary();
     }
 
-    // Tạo đơn từ giỏ của người dùng, cập nhật tồn kho và ghi nhận mã giảm giá đã dùng.
+    // Create an order from the user's cart, update inventory, and mark the discount code as used.
     @Override
     @PreAuthorize("hasRole('USER')")
     public OrderResponse createOrder(CreateOrderRequest request) {
@@ -257,7 +257,7 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    // Chuẩn bị giỏ hàng, kiểm tra mã giảm giá và tính tiền dùng chung cho xem trước và tạo đơn.
+    // Prepare the cart, validate the discount code, and calculate amounts for both order previews and order creation.
     private Checkout loadCheckout(String userId, Cart cart, String discountId) {
         List<CartItem> items = cartItemRepository.findActiveItemsByCartId(cart.getId());
         if (items.isEmpty()) {
@@ -296,7 +296,7 @@ public class OrderServiceImpl implements OrderService {
         return new Checkout(items, assignment, summary);
     }
 
-    // Tính thành tiền một dòng giỏ hàng, làm tròn đến hai chữ số thập phân.
+    // Calculate a cart item's line total, rounded to two decimal places.
     private BigDecimal calculateLineTotal(CartItem item) {
         return item.getProductVariant().getPrice().multiply(BigDecimal.valueOf(item.getProductQuantity()))
                 .setScale(2, RoundingMode.HALF_UP);
@@ -310,7 +310,7 @@ public class OrderServiceImpl implements OrderService {
         private final OrderSummaryResponse summary;
     }
 
-    // Lấy danh sách đơn trả hàng cho admin, hỗ trợ phân trang và lọc theo trạng thái.
+    // Fetch order returns for admins, with pagination and status filtering.
     @Override
     @PreAuthorize("hasRole('ADMIN')")
     public Page<OrderReturnResponse> getOrderReturns(int page, int size, String filterBy) {
@@ -334,7 +334,7 @@ public class OrderServiceImpl implements OrderService {
         });
     }
 
-    // Ghi từng batch vào file CSV, dùng ID cuối batch làm cursor tiếp theo.
+    // Write each batch to the CSV file, using the last ID in the batch as the next cursor.
     @Override
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
@@ -391,7 +391,7 @@ public class OrderServiceImpl implements OrderService {
         return status;
     }
 
-    // Lấy chi tiết đơn trả hàng và các sản phẩm trả lại cho admin.
+    // Fetch order return details and returned items for admins.
     @Override
     @PreAuthorize("hasRole('ADMIN')")
     public ViewOrderDetailResponse viewOrderReturnDetail(String id) {
@@ -415,7 +415,7 @@ public class OrderServiceImpl implements OrderService {
         return response;
     }
 
-    // Chuyển thông tin chung của đơn trả hàng sang DTO dùng cho danh sách và chi tiết.
+    // Map common order return information to the DTO used for lists and details.
     private void populateReturnResponse(OrderReturn orderReturn, List<OrderReturnItem> items, OrderReturnResponse response) {
         LocalDateTime createdAt = orderReturn.getCreatedAt();
         long minutes = createdAt == null ? 0 : Math.max(0, Duration.between(createdAt, LocalDateTime.now()).toMinutes());

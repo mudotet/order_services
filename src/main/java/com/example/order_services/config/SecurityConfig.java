@@ -17,7 +17,7 @@ import org.springframework.security.web.authentication.session.SessionAuthentica
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 
-/** Mở đăng nhập; các API còn lại cần xác thực và quyền tại service. */
+/** Allow public access to login; other APIs require authentication and service-level authorization. */
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {
@@ -31,7 +31,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         .anyRequest().authenticated())
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
-                // ponytail: tắt CSRF để xử lý local
+                // ponytail: disable CSRF for local use
                 .csrf(csrf -> csrf.disable())
                 .httpBasic(Customizer.withDefaults())
                 .build();

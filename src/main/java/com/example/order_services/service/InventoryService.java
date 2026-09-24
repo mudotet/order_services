@@ -8,7 +8,7 @@ import com.example.order_services.dto.response.ProductInventoryResponse;
 
 import org.springframework.data.domain.Page;
 
-/** Các thao tác quản lý tồn kho dành cho admin. */
+/** Inventory management operations for admins. */
 public interface InventoryService {
     InventoryResponse updateQuantity(
             String productVariantId,

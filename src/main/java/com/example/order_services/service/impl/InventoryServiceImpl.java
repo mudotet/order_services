@@ -20,21 +20,21 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/** Quản lý số lượng tồn kho dành cho admin. */
+/** Manage inventory quantities for admins. */
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class InventoryServiceImpl implements InventoryService {
     private final InventoryRepository inventoryRepository;
 
-    /** Admin đặt lại tổng tồn kho của biến thể bằng quantity, không cộng thêm quantity vào tồn cũ. */
+    /** Allow admins to set the variant's total stock to quantity instead of adding quantity to the existing stock. */
     @Override
     @Transactional
     public InventoryResponse updateQuantity(String productVariantId, UpdateInventoryQuantityRequest request) {
         if (request.getQuantity() == null || request.getQuantity() < 0) {
             throw new ApplicationException(EnumCode.BAD_REQUEST, "Inventory quantity must be nonnegative");
         }
-        // Khóa bản ghi kho trong transaction ghi để tránh các cập nhật đồng thời ghi đè nhau.
+        // Lock the inventory record in a write transaction to prevent concurrent updates from overwriting each other.
         Inventory inventory = inventoryRepository.findByProductVariantIdsForUpdate(List.of(productVariantId)).stream()
                 .findFirst().orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Inventory not found"));
         inventory.setQuantityInStock(request.getQuantity());
@@ -84,14 +84,7 @@ public class InventoryServiceImpl implements InventoryService {
     @Transactional
     public ProductInventoryResponse updateProductInStock(String productId, String variantsId,
                                                          UpdateProductInStockRequest request) {
-        if (request == null
-                || (request.getQuantityInStock() != null && request.getQuantityInStock() < 0)
-                || (request.getProductPrice() != null && request.getProductPrice().signum() < 0)
-                || (request.getProductName() != null && request.getProductName().isBlank())
-                || (request.getProductType() != null && request.getProductType().isBlank())
-                || (request.getProductDescription() != null && request.getProductDescription().isBlank())) {
-            throw new ApplicationException(EnumCode.BAD_REQUEST, "Invalid product information");
-        }
+
         if (request.getProductVariantId() != null && !variantsId.equals(request.getProductVariantId())) {
             throw new ApplicationException(EnumCode.BAD_REQUEST, "Product variant ID cannot be changed");
         }

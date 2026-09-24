@@ -11,7 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/** Cung cấp các mã giảm giá khả dụng của người dùng đang đăng nhập. */
+/** Provide available discount codes for the signed-in user. */
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('USER')")
@@ -20,7 +20,7 @@ public class DiscountServiceImpl implements DiscountService {
     private final UserDiscountRepository userDiscountRepository;
     private final CurrentUserService currentUserService;
 
-    /** Lấy mã được cấp cho người hiện tại, chưa dùng và có trạng thái AVAILABLE; chưa lọc theo hạn dùng. */
+    /** Fetch unused codes assigned to the current user with AVAILABLE status; expiration dates are not yet checked. */
     @Override
     public List<DiscountResponse> getDiscounts() {
         String userId = currentUserService.getCurrentUser().getId();

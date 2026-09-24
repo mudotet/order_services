@@ -10,7 +10,7 @@ import java.util.Collection;
 import java.util.List;
 
 public interface OrderReturnItemRepository extends JpaRepository<OrderReturnItem, String> {
-    // Chỉ lấy ID và lý do, không giữ các entity của toàn bộ file trong persistence context.
+    // Fetch only IDs and reasons to avoid retaining entities for the entire file in the persistence context.
     @Query("""
             SELECT i.orderReturn.id, i.reasonType FROM OrderReturnItem i
             WHERE i.orderReturn.id IN :returnIds AND i.deleted = false
@@ -20,7 +20,7 @@ public interface OrderReturnItemRepository extends JpaRepository<OrderReturnItem
 
     List<OrderReturnItem> findByOrderReturnId(String id);
 
-    // Lấy các sản phẩm trả lại chưa xóa theo danh sách returnId.
+    // Fetch non-deleted return items for the given list of return IDs.
     @EntityGraph(attributePaths = {"orderReturn", "orderItem.productVariant.product"})
     List<OrderReturnItem> findByOrderReturnIdInAndDeletedFalseOrderByCreatedAtAscIdAsc(Collection<String> returnIds);
 }
