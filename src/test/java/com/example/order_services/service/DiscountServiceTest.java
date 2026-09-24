@@ -25,11 +25,11 @@ class DiscountServiceTest {
     @Test
     void resolvesUsernameInServiceAndReturnsDiscountId() {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("alice", null, List.of()));
+                new UsernamePasswordAuthenticationToken("alice@example.com", null, List.of()));
         UserRepository users = mock(UserRepository.class);
-        User user = User.builder().userName("alice").build();
+        User user = User.builder().userName("alice").email("alice@example.com").build();
         user.setId("alice-id");
-        when(users.findByUserNameAndDeletedFalse("alice")).thenReturn(Optional.of(user));
+        when(users.findByEmailAndDeletedFalse("alice@example.com")).thenReturn(Optional.of(user));
         UserDiscountRepository assignments = mock(UserDiscountRepository.class);
         Discount discount = Discount.builder().discountType(DiscountType.PERCENTAGE).discountValue(new BigDecimal("10")).build();
         discount.setId("discount-id");

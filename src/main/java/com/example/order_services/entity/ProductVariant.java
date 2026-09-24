@@ -16,7 +16,8 @@ import java.math.BigDecimal;
 @Entity
 @Builder
 @AllArgsConstructor
-@Table(name = "product_variants")
+@Table(name = "product_variants",
+        check = @CheckConstraint(name = "chk_product_variant_price", constraint = "price >= 0"))
 public class ProductVariant extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
@@ -25,6 +26,6 @@ public class ProductVariant extends BaseEntity {
     @Column(name = "product_variant", nullable = false)
     private String productVariant;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal price;
 }

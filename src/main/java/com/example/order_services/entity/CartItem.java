@@ -10,7 +10,9 @@ import lombok.*;
 @Entity
 @Builder
 @AllArgsConstructor
-@Table(name = "cart_items")
+@Table(name = "cart_items",
+        uniqueConstraints = @UniqueConstraint(name = "uk_cart_item", columnNames = {"cart_id", "product_variant_id"}),
+        check = @CheckConstraint(name = "chk_cart_item_quantity", constraint = "product_quantity > 0"))
 public class CartItem extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cart_id", nullable = false)
