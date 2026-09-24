@@ -43,8 +43,8 @@ business APIs; the extra CSRF-token endpoint remains removed.
   persistence, rollback and concurrent checkout must not be considered safe for real orders.
 - Fetch joins load cart item product details; inventory reads use one batch. Queries exclude
   soft-deleted rows. No order-item re-query or per-line price query is needed.
-- Basic authentication keeps CSRF protection through Spring Security's built-in `csrf.spa()`.
-  Existing requests supply the `XSRF-TOKEN` cookie; writes require the matching `X-XSRF-TOKEN` header.
+- CSRF protection is disabled at the user's request for local learning; writes still require authentication and their existing roles.
+  Restore CSRF protection before using cookie-based authentication in production.
 
 ## Validation
 
@@ -66,11 +66,11 @@ suite; the user declined restoring that transaction for now.
   not compatibility with the actual MySQL DDL or MySQL concurrency semantics.
 - Until the existing status vocabulary is supplied, eligible `user_discounts.status` is assumed
   to be `AVAILABLE`; consumption sets `USED`. Other status values are rejected, not silently accepted.
-- The existing boolean column `used_at` remains mapped as before, but the Java field is now `used`.
-  Confirm the actual column type; a datetime column would require a different mapping.
-- Address/payment entities and their user relationships are absent from this repo. Their IDs
-  remain accepted as in the original contract; existence is delegated to existing database foreign
-  keys. Ownership of these two resources is not yet checked and needs the real DDL.
+- The supplied DDL defines `used_at` as a nullable datetime, now mapped to `LocalDateTime usedAt`.
+  Available discounts require a null timestamp; checkout records the consumption time.
+- Address and payment entities now match the supplied DDL.
+  Checkout still accepts their IDs, with existence delegated to database foreign keys.
+  Neither table has an ownership column in the supplied schema.
 
 ## Naming decisions
 
@@ -90,7 +90,7 @@ There is no additional naming-standard document in this repo. Spring override na
 | `order_id` parameter | removed with the existing-order summary route |
 | `CartId` field | `cartId` (database column unaffected) |
 | `Permissions` entity | singular `Permission`, same `permissions` table |
-| boolean `usedAt` | `used`, same `used_at` column |
+| boolean `used` | `LocalDateTime usedAt`, matching the supplied `used_at datetime` column |
 | `loadUserByUsername` | unchanged: required by Spring `UserDetailsService` |
 | `findByUserNameAndDeletedFalse` | `UserName` matches the entity's `userName` property; underscores in nested derived queries are valid Spring Data traversal separators |
 

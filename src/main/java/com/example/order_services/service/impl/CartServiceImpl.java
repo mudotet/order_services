@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/** Đọc giỏ và điều chỉnh số lượng trong phạm vi người dùng đang đăng nhập. */
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('USER')")
@@ -33,14 +34,17 @@ public class CartServiceImpl implements CartService {
     private final InventoryRepository inventoryRepository;
     private final CurrentUserService currentUserService;
 
+    // Lấy giỏ hàng, tổng tiền và tình trạng tồn kho của người dùng đang đăng nhập.
     @Override
     public CartDetailResponse getCartDetail() {
         User user = currentUserService.getCurrentUser();
         Cart cart = cartRepository.findByUser_IdAndDeletedFalse(user.getId()).orElse(null);
+        // Chưa có giỏ được biểu diễn bằng danh sách rỗng và tạm tính bằng 0.
         if (cart == null) {
             return new CartDetailResponse(null, List.of(), new BigDecimal("0.00"));
         }
         List<CartItem> items = cartItemRepository.findActiveItemsByCartId(cart.getId());
+        // Tải tồn kho theo lô cho các biến thể trong giỏ, sau đó tra cứu khi dựng từng DTO.
         List<String> variantIds = items.stream().map(item -> item.getProductVariant().getId()).distinct().toList();
         Map<String, Inventory> inventories = variantIds.isEmpty() ? Map.of()
                 : inventoryRepository.findAllByProductVariantIdInAndDeletedFalse(variantIds).stream()
@@ -65,6 +69,7 @@ public class CartServiceImpl implements CartService {
         return new CartDetailResponse(cart.getId(), responses, subtotal);
     }
 
+    /** Mỗi thao tác chỉ tăng/giảm một đơn vị; giảm về 0 sẽ xóa mềm dòng giỏ. */
     @Override
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public Integer adjustCartItemQuantity(String cartItemId, AdjustCartItemQuantityRequest request) {
@@ -73,10 +78,12 @@ public class CartServiceImpl implements CartService {
             throw new ApplicationException(EnumCode.BAD_REQUEST, "Quantity change must be 1 or -1");
         }
         User user = currentUserService.getCurrentUser();
+        // Khóa giỏ để tuần tự hóa thay đổi số lượng; luồng tạo đơn cũng yêu cầu khóa cùng giỏ.
         // Share the checkout lock so button clicks cannot race each other or order creation.
         Cart cart = cartRepository.findByUserIdForUpdate(user.getId())
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Cart item not found"));
         List<CartItem> items = cartItemRepository.findActiveItemsByCartId(cart.getId());
+        // Tìm trong giỏ của người hiện tại để không sửa được cartItemId thuộc người khác.
         CartItem item = items.stream().filter(candidate -> candidate.getId().equals(cartItemId)).findFirst()
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Cart item not found"));
         if (item.getProductQuantity() == null || item.getProductQuantity() <= 0) {
@@ -86,6 +93,7 @@ public class CartServiceImpl implements CartService {
             String variantId = item.getProductVariant().getId();
             Inventory inventory = inventoryRepository.findByProductVariantIdsForUpdate(List.of(variantId)).stream()
                     .findFirst().orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Inventory not found"));
+            // Cộng tất cả dòng cùng biến thể và đơn vị sắp tăng để tránh vượt kho khi có dòng trùng.
             long requestedQuantity = change;
             for (CartItem candidate : items) {
                 if (candidate.getProductVariant().getId().equals(variantId)) {
@@ -108,15 +116,18 @@ public class CartServiceImpl implements CartService {
         return newQuantity;
     }
 
+    // Tính thành tiền theo giá và số lượng của một dòng giỏ hàng.
     private BigDecimal calculateLineTotal(CartItem item) {
         return item.getProductVariant().getPrice().multiply(BigDecimal.valueOf(item.getProductQuantity()))
                 .setScale(2, RoundingMode.HALF_UP);
     }
 
+    // Ghép tên sản phẩm và biến thể để hiển thị trong giỏ hàng.
     private String buildProductName(ProductVariant variant) {
         return variant.getProduct().getProductName() + " " + variant.getProductVariant();
     }
 
+    // Trạng thái phản ánh tồn còn lại sau số lượng đang chọn; dưới 10 là LIMITED_STOCK.
     private String calculateStockStatus(int stock, int quantity) {
         if (stock <= 0 || stock < quantity) {
             return StockStatus.OUT_OF_STOCK.name();

@@ -12,10 +12,12 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/** Chuyển exception tại tầng MVC thành HTTP status và cấu trúc BaseResponse thống nhất. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -34,7 +36,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(401).body(BaseResponse.error(EnumCode.UNAUTHORIZED, "Authentication required"));
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     ResponseEntity<BaseResponse<Void>> handleInvalidRequestBody() {
         return ResponseEntity.badRequest().body(BaseResponse.error(EnumCode.BAD_REQUEST, "Invalid request body"));
     }
@@ -50,6 +52,7 @@ public class GlobalExceptionHandler {
     ResponseEntity<BaseResponse<Void>> handleValidationException(
             MethodArgumentNotValidException exception
     ) {
+        // Trả lỗi theo tên trường để giao diện gắn thông báo vào ô nhập tương ứng.
         Map<String, String> errors = new LinkedHashMap<>();
         exception.getBindingResult().getFieldErrors()
                 .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
@@ -63,6 +66,7 @@ public class GlobalExceptionHandler {
                 .body(BaseResponse.error(EnumCode.BAD_REQUEST, "Invalid related resource"));
     }
 
+    // Lỗi chưa được phân loại trả thông báo chung, tránh đưa chi tiết nội bộ ra response.
     @ExceptionHandler(Exception.class)
     ResponseEntity<BaseResponse<Void>> handleUnexpectedException() {
         return ResponseEntity.internalServerError()

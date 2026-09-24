@@ -20,19 +20,21 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/** Quản lý số lượng tồn kho dành cho admin. */
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class InventoryServiceImpl implements InventoryService {
     private final InventoryRepository inventoryRepository;
 
-    // Update the quantity of a product variant in the inventory
+    /** Admin đặt lại tổng tồn kho của biến thể bằng quantity, không cộng thêm quantity vào tồn cũ. */
     @Override
     @Transactional
     public InventoryResponse updateQuantity(String productVariantId, UpdateInventoryQuantityRequest request) {
         if (request.getQuantity() == null || request.getQuantity() < 0) {
             throw new ApplicationException(EnumCode.BAD_REQUEST, "Inventory quantity must be nonnegative");
         }
+        // Khóa bản ghi kho trong transaction ghi để tránh các cập nhật đồng thời ghi đè nhau.
         Inventory inventory = inventoryRepository.findByProductVariantIdsForUpdate(List.of(productVariantId)).stream()
                 .findFirst().orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Inventory not found"));
         inventory.setQuantityInStock(request.getQuantity());

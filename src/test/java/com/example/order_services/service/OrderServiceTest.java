@@ -28,19 +28,22 @@ class OrderServiceTest {
     private final OrderStateRepository states = mock(OrderStateRepository.class);
     private final OrderRepository orders = mock(OrderRepository.class);
     private final OrderItemRepository orderItems = mock(OrderItemRepository.class);
+    private final OrderReturnRepository orderReturns = mock(OrderReturnRepository.class);
+    private final OrderReturnItemRepository returnItems = mock(OrderReturnItemRepository.class);
     private final UserRepository users = mock(UserRepository.class);
     private final OrderServiceImpl service = new OrderServiceImpl(carts, items, discounts, inventories, states,
-            orders, orderItems, new CurrentUserService(users));
+            orders, orderItems, orderReturns, returnItems,
+            new CurrentUserService(users), mock(org.modelmapper.ModelMapper.class), users);
     private CartItem item;
     private Inventory inventory;
 
     @BeforeEach
     void setUp() {
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("alice", null, List.of()));
-        User user = User.builder().userName("alice").build();
+                new UsernamePasswordAuthenticationToken("alice@example.com", null, List.of()));
+        User user = User.builder().userName("alice").email("alice@example.com").build();
         user.setId("alice-id");
-        when(users.findByUserNameAndDeletedFalse("alice")).thenReturn(Optional.of(user));
+        when(users.findByEmailAndDeletedFalse("alice@example.com")).thenReturn(Optional.of(user));
         Cart cart = Cart.builder().user(user).build();
         cart.setId("cart-id");
         when(carts.findByUser_IdAndDeletedFalse("alice-id")).thenReturn(Optional.of(cart));
@@ -110,7 +113,7 @@ class OrderServiceTest {
         assertThat(response.getState()).isEqualTo("PENDING");
         assertThat(inventory.getQuantityInStock()).isEqualTo(1);
         assertThat(item.isDeleted()).isTrue();
-        assertThat(assignment.getUsed()).isTrue();
+        assertThat(assignment.getUsedAt()).isNotNull();
         verify(discounts, times(2)).findAvailableAssignment("alice-id", "discount-id");
         verify(orders).save(argThat(order -> order.getUser().getId().equals("alice-id")));
         verify(orderItems).saveAll(argThat(saved -> {
@@ -136,7 +139,7 @@ class OrderServiceTest {
         var response = service.createOrder(new CreateOrderRequest(null, "address-id", "payment-id"));
         assertThat(response.getDiscountAmount()).isEqualByComparingTo("0.00");
         assertThat(response.getTotal()).isEqualByComparingTo("30025.00");
-        assertThat(assignment.getUsed()).isFalse();
+        assertThat(assignment.getUsedAt()).isNull();
         verify(orders).save(argThat(order -> order.getDiscount() == null));
         verify(discounts, never()).save(any());
     }
@@ -152,7 +155,7 @@ class OrderServiceTest {
     private UserDiscount assignDiscount(DiscountType type, String value) {
         Discount discount = Discount.builder().discountType(type).discountValue(new BigDecimal(value)).build();
         discount.setId("discount-id");
-        UserDiscount assignment = UserDiscount.builder().discount(discount).used(false).status("AVAILABLE")
+        UserDiscount assignment = UserDiscount.builder().discount(discount).status("AVAILABLE")
                 .receivedAt(LocalDateTime.now().minusDays(1)).expiredAt(LocalDateTime.now().plusDays(1)).build();
         when(discounts.findAvailableAssignment("alice-id", "discount-id"))
                 .thenReturn(Optional.of(assignment));

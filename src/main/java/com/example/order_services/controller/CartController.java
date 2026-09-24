@@ -14,11 +14,13 @@ import org.springframework.web.bind.annotation.*;
 public class CartController {
     private final CartService cartService;
 
+    // api getting cartDetail
     @GetMapping
     public BaseResponse<CartDetailResponse> getCartDetail() {
         return BaseResponse.success(cartService.getCartDetail());
     }
 
+    // api update quantity item in cart
     @PatchMapping("/items/{cartItemId}/quantity")
     public BaseResponse<Integer> adjustCartItemQuantity(@PathVariable String cartItemId,
                                                       @Valid @RequestBody AdjustCartItemQuantityRequest request) {

@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+/** Cung cấp các mã giảm giá khả dụng của người dùng đang đăng nhập. */
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('USER')")
@@ -19,6 +20,7 @@ public class DiscountServiceImpl implements DiscountService {
     private final UserDiscountRepository userDiscountRepository;
     private final CurrentUserService currentUserService;
 
+    /** Lấy mã được cấp cho người hiện tại, chưa dùng và có trạng thái AVAILABLE; chưa lọc theo hạn dùng. */
     @Override
     public List<DiscountResponse> getDiscounts() {
         String userId = currentUserService.getCurrentUser().getId();

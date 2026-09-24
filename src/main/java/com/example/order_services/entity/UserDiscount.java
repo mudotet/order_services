@@ -8,7 +8,8 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(
-        name = "user_discounts"
+        name = "user_discounts",
+        uniqueConstraints = @UniqueConstraint(name = "uk_user_discounts_user_discount", columnNames = {"user_id", "discount_id"})
 )
 @Getter
 @Setter
@@ -23,12 +24,12 @@ public class UserDiscount extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "discount_id", nullable = false)
     private Discount discount;
-    @Column(name = "status", nullable = false)
+    @Column(name = "status", nullable = false, length = 50)
     private String status;
-    @Column(name = "received_at", nullable = false)
+    @Column(name = "received_at")
     private LocalDateTime receivedAt;
-    @Column(name = "expired_at", nullable = false)
+    @Column(name = "expired_at")
     private LocalDateTime expiredAt;
-    @Column(name = "used_at", nullable = false)
-    private Boolean used;
+    @Column(name = "used_at")
+    private LocalDateTime usedAt;
 }
