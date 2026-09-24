@@ -191,7 +191,6 @@ public class OrderServiceImpl implements OrderService {
     @PreAuthorize("hasRole('USER')")
     public OrderResponse createOrder(CreateOrderRequest request) {
         User user = currentUserService.getCurrentUser();
-        // ponytail: write transaction deferred for learning; restore it before processing real orders.
         Cart cart = cartRepository.findByUserIdForUpdate(user.getId())
                 .orElseThrow(() -> new ApplicationException(EnumCode.BAD_REQUEST, "Cart is empty"));
         Checkout checkout = loadCheckout(user.getId(), cart, request.getDiscountId());
