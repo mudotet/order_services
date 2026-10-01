@@ -9,11 +9,9 @@ import com.example.order_services.repository.ProductVariantRepository;
 import com.example.order_services.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 @Service
-@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class ProductServiceImpl implements ProductService {
 

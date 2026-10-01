@@ -7,6 +7,8 @@ import com.alibaba.excel.write.metadata.WriteSheet;
 import com.example.order_services.common.DiscountType;
 import com.example.order_services.common.EnumCode;
 import com.example.order_services.common.OrderStatus;
+import com.example.order_services.common.DeliveryFailureReason;
+import com.example.order_services.dto.request.AssignShipperRequest;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.UpdateOrderStateRequest;
 import com.example.order_services.dto.response.*;
@@ -22,7 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,10 +46,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Xử lý đặt hàng cho người dùng và quản lý đơn trả hàng cho admin. */
+/** Handle order placement for users and order return management for admins. */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -70,12 +74,14 @@ public class OrderServiceImpl implements OrderService {
     private final CurrentUserService currentUserService;
     private final ModelMapper modelMapper;
     private final UserRepository userRepository;
+    private final NotificationRepository notificationRepository;
+    private final TrackingLogRepository trackingLogRepository;
+    private final UserRoleRepository userRoleRepository;
 
 
 
-    // Lấy thông tin theo dõi đơn hàng thuộc người dùng đang đăng nhập.
+    // Fetch tracking information for an order belonging to the signed-in user.
     @Override
-    @PreAuthorize("hasRole('USER')")
     public TrackingOrderDetailResponse getTrackingOrderInfo(String orderId) {
         String userId = currentUserService.getCurrentUser().getId();
         TrackingOrderDetailResponse tracking = orderRepository.findTrackingOrderInfo(orderId, userId)
@@ -93,24 +99,76 @@ public class OrderServiceImpl implements OrderService {
         return tracking;
     }
 
-    // Admin chuyển trạng thái, giữ nguyên ngày giao dự kiến đã lưu.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     @Transactional
-    public void updateOrderState(String id, UpdateOrderStateRequest request) {
+    public OrderDeliveryResponse assignShipper(String id, AssignShipperRequest request) {
         User admin = currentUserService.getCurrentUser();
         Order order = orderRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order not found"));
+        if (!Set.of("PROCESSING", "DELIVERY_FAILED").contains(order.getOrderState().getState())) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Assign a shipper only before delivery or after a failed attempt");
+        }
+        User shipper = userRepository.findById(request.getShipperId())
+                .filter(user -> !user.isDeleted())
+                .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Shipper not found"));
+        boolean hasRole = userRoleRepository.findAllByUser_IdAndDeletedFalseAndRole_DeletedFalse(shipper.getId())
+                .stream().anyMatch(role -> role.getRole().getRoleName().equals("SHIPPER"));
+        if (!hasRole) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Selected user must have an active SHIPPER role");
+        }
+        if (order.getShipper() == null || !order.getShipper().getId().equals(shipper.getId())) {
+            order.setShipper(shipper);
+            order.setAssignedAt(LocalDateTime.now(DELIVERY_TIME_ZONE));
+            order.setDeliveryAttemptId(UUID.randomUUID().toString());
+            order.setUpdatedBy(admin.getId());
+            orderRepository.save(order);
+        }
+        return deliveryResponse(order);
+    }
+
+    // Keep status, tracking history and notifications in the same locked transaction.
+    @Override
+    @Transactional
+    public OrderDeliveryResponse updateOrderState(String id, UpdateOrderStateRequest request) {
+        User actor = currentUserService.getCurrentUser();
+        boolean isAdmin = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        Order order = orderRepository.findByIdAndDeletedFalse(id)
+                .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order not found"));
+        if (!isAdmin && (order.getShipper() == null || !order.getShipper().getId().equals(actor.getId()))) {
+            throw new ApplicationException(EnumCode.NOT_FOUND, "Order not found");
+        }
         OrderStatus current = OrderStatus.valueOf(order.getOrderState().getState());
         OrderStatus next = request.getState();
+        if (!isAdmin && (!Set.of(OrderStatus.SHIPPING, OrderStatus.DELIVERED, OrderStatus.DELIVERY_FAILED).contains(next)
+                || current == OrderStatus.DELIVERY_FAILED && next == OrderStatus.SHIPPING)) {
+            throw new ApplicationException(EnumCode.FORBIDDEN, "Only admins can manage fulfillment or retry a failed delivery");
+        }
+        if (order.getShipper() != null && request.getDeliveryAttemptId() == null) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "deliveryAttemptId is required for assigned orders");
+        }
+        if ((order.getShipper() != null || request.getDeliveryAttemptId() != null)
+                && !Objects.equals(order.getDeliveryAttemptId(), request.getDeliveryAttemptId())) {
+            throw new ApplicationException(EnumCode.CONFLICT, "Delivery attempt changed; reload the order");
+        }
+        String note = request.getNote() == null ? null : request.getNote().strip();
+        if (next == OrderStatus.DELIVERY_FAILED) {
+            if (request.getFailureReason() == null || request.getFailureReason() == DeliveryFailureReason.OTHER
+                    && (note == null || note.isBlank())) {
+                throw new ApplicationException(EnumCode.BAD_REQUEST, "A failure reason is required; OTHER also requires a note");
+            }
+        } else if (request.getFailureReason() != null) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "failureReason is only valid for DELIVERY_FAILED");
+        }
         if (next == current) {
-            return;
+            return deliveryResponse(order);
         }
         boolean allowed = switch (current) {
             case PENDING -> next == OrderStatus.CONFIRMED || next == OrderStatus.PROCESSING || next == OrderStatus.CANCELLED;
             case CONFIRMED -> next == OrderStatus.PROCESSING || next == OrderStatus.CANCELLED;
             case PROCESSING -> next == OrderStatus.SHIPPING || next == OrderStatus.CANCELLED;
-            case SHIPPING -> next == OrderStatus.DELIVERED;
+            case SHIPPING -> next == OrderStatus.DELIVERED || next == OrderStatus.DELIVERY_FAILED;
+            case DELIVERY_FAILED -> isAdmin && next == OrderStatus.SHIPPING;
             case DELIVERED, CANCELLED -> false;
         };
         if (!allowed) {
@@ -118,14 +176,43 @@ public class OrderServiceImpl implements OrderService {
         }
         OrderState state = orderStateRepository.findByStateAndDeletedFalse(next.name())
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order state not found"));
+        // A retry gets a new token; an old phone request must never complete a later attempt.
+        if (current == OrderStatus.DELIVERY_FAILED || next == OrderStatus.SHIPPING && order.getDeliveryAttemptId() == null) {
+            order.setDeliveryAttemptId(UUID.randomUUID().toString());
+        }
+        trackingLogRepository.save(TrackingLog.builder().order(order).oldStatus(order.getOrderState())
+                .newStatus(state).createdBy(actor.getId()).createdAt(LocalDateTime.now(DELIVERY_TIME_ZONE))
+                .deliveryAttemptId(order.getDeliveryAttemptId()).failureReason(request.getFailureReason())
+                .takeNote(note).build());
         order.setOrderState(state);
-        order.setUpdatedBy(admin.getId());
+        order.setUpdatedBy(actor.getId());
         orderRepository.save(order);
+        String message = switch (next) {
+            case SHIPPING -> "Đơn hàng của bạn đang trên đường giao";
+            case DELIVERED -> "Cảm ơn bạn đã mua hàng";
+            default -> null;
+        };
+        if (message != null) {
+            Notification notification = Notification.builder()
+                    .orderId(order.getId())
+                    .customerName(order.getUser().getUserName())
+                    .customerEmail(order.getUser().getEmail())
+                    .message(message)
+                    .build();
+            notification.setCreatedBy(actor.getId());
+            notificationRepository.save(notification);
+        }
+        return deliveryResponse(order);
     }
 
-    // Tổng hợp số lượng và tiền hoàn của các đơn trả hàng cho admin.
+    private OrderDeliveryResponse deliveryResponse(Order order) {
+        return new OrderDeliveryResponse(order.getId(), order.getOrderState().getState(),
+                order.getShipper() == null ? null : order.getShipper().getId(),
+                order.getDeliveryAttemptId(), order.getAssignedAt());
+    }
+
+    // Summarize order return counts and refund amounts for admins.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     public OrderReturnsSummaryResponse calculateOrderReturnSummary() {
         currentUserService.getCurrentUser();
 
@@ -139,18 +226,18 @@ public class OrderServiceImpl implements OrderService {
     }
 
 
-    // Lấy tổng tiền hoàn theo quý hiện tại.
+    // Get the total refund amount for the current quarter.
     private BigDecimal calTotalRefunds() {
         return orderReturnRepository.getTotalRefundForSpecificQuarter(LocalDateTime.now().getYear(),
                 (LocalDateTime.now().getMonthValue() - 1) / 3 + 1);
     }
 
-    // Đếm các đơn đang kiểm tra theo truy vấn thống kê.
+    // Count returns under inspection using the statistics query.
     private Integer calAwaitInspectionCount() {
         return orderReturnRepository.getAwaitInspectionCount();
     }
 
-    // Tính số giờ trung bình từ lúc yêu cầu trả hàng đến khi hoàn tiền.
+    // Calculate the average number of hours from the return request to the refund.
     private Integer calAverageCycleTime() {
         List<OrderReturn> completedReturns = orderReturnRepository.getCompleteReturns();
         if (completedReturns.isEmpty()) {
@@ -166,19 +253,18 @@ public class OrderServiceImpl implements OrderService {
         return (int) Math.round((double) totalHours / completedReturns.size());
     }
 
-    // Tạm trả 0 khi chưa triển khai so sánh số đơn trả hàng giữa các kỳ.
+    // Return 0 until the comparison of return counts between periods is implemented.
     private Integer calActiveReturnChangePercentage() {
         return 0;
     }
 
-    // Đếm các đơn trả hàng vẫn đang được xử lý.
+    // Count order returns that are still being processed.
     private Integer calActiveReturnCount() {
         return orderReturnRepository.getActiveReturnCount();
     }
 
-    // Tính tạm tính, giảm giá, phí vận chuyển và tổng tiền từ giỏ của người dùng.
+    // Calculate the subtotal, discount, shipping fee, and total from the user's cart.
     @Override
-    @PreAuthorize("hasRole('USER')")
     public OrderSummaryResponse calculateOrderSummary(String discountId) {
         User user = currentUserService.getCurrentUser();
         Cart cart = cartRepository.findByUser_IdAndDeletedFalse(user.getId())
@@ -186,12 +272,11 @@ public class OrderServiceImpl implements OrderService {
         return loadCheckout(user.getId(), cart, discountId).getSummary();
     }
 
-    // Tạo đơn từ giỏ của người dùng, cập nhật tồn kho và ghi nhận mã giảm giá đã dùng.
+    // Create an order from the user's cart, update inventory, and mark the discount code as used.
     @Override
-    @PreAuthorize("hasRole('USER')")
     public OrderResponse createOrder(CreateOrderRequest request) {
         User user = currentUserService.getCurrentUser();
-        // ponytail: write transaction deferred for learning; restore it before processing real orders.
+
         Cart cart = cartRepository.findByUserIdForUpdate(user.getId())
                 .orElseThrow(() -> new ApplicationException(EnumCode.BAD_REQUEST, "Cart is empty"));
         Checkout checkout = loadCheckout(user.getId(), cart, request.getDiscountId());
@@ -257,7 +342,7 @@ public class OrderServiceImpl implements OrderService {
                 .build();
     }
 
-    // Chuẩn bị giỏ hàng, kiểm tra mã giảm giá và tính tiền dùng chung cho xem trước và tạo đơn.
+    // Prepare the cart, validate the discount code, and calculate amounts for both order previews and order creation.
     private Checkout loadCheckout(String userId, Cart cart, String discountId) {
         List<CartItem> items = cartItemRepository.findActiveItemsByCartId(cart.getId());
         if (items.isEmpty()) {
@@ -296,7 +381,7 @@ public class OrderServiceImpl implements OrderService {
         return new Checkout(items, assignment, summary);
     }
 
-    // Tính thành tiền một dòng giỏ hàng, làm tròn đến hai chữ số thập phân.
+    // Calculate a cart item's line total, rounded to two decimal places.
     private BigDecimal calculateLineTotal(CartItem item) {
         return item.getProductVariant().getPrice().multiply(BigDecimal.valueOf(item.getProductQuantity()))
                 .setScale(2, RoundingMode.HALF_UP);
@@ -310,9 +395,8 @@ public class OrderServiceImpl implements OrderService {
         private final OrderSummaryResponse summary;
     }
 
-    // Lấy danh sách đơn trả hàng cho admin, hỗ trợ phân trang và lọc theo trạng thái.
+    // Fetch order returns for admins, with pagination and status filtering.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     public Page<OrderReturnResponse> getOrderReturns(int page, int size, String filterBy) {
         currentUserService.getCurrentUser();
         if (page < 0 || size < 1 || size > 100) {
@@ -334,9 +418,8 @@ public class OrderServiceImpl implements OrderService {
         });
     }
 
-    // Ghi từng batch vào file CSV, dùng ID cuối batch làm cursor tiếp theo.
+    // Write each batch to the CSV file, using the last ID in the batch as the next cursor.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
     public Path exportOrderReturns(String filterBy) throws IOException {
         currentUserService.getCurrentUser();
@@ -391,9 +474,8 @@ public class OrderServiceImpl implements OrderService {
         return status;
     }
 
-    // Lấy chi tiết đơn trả hàng và các sản phẩm trả lại cho admin.
+    // Fetch order return details and returned items for admins.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     public ViewOrderDetailResponse viewOrderReturnDetail(String id) {
         currentUserService.getCurrentUser();
         OrderReturn orderReturn = orderReturnRepository.findByIdAndDeletedFalse(id)
@@ -415,7 +497,7 @@ public class OrderServiceImpl implements OrderService {
         return response;
     }
 
-    // Chuyển thông tin chung của đơn trả hàng sang DTO dùng cho danh sách và chi tiết.
+    // Map common order return information to the DTO used for lists and details.
     private void populateReturnResponse(OrderReturn orderReturn, List<OrderReturnItem> items, OrderReturnResponse response) {
         LocalDateTime createdAt = orderReturn.getCreatedAt();
         long minutes = createdAt == null ? 0 : Math.max(0, Duration.between(createdAt, LocalDateTime.now()).toMinutes());

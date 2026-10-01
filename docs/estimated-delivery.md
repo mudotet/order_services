@@ -7,20 +7,22 @@ No new address-management endpoint is added.
 
 ## Start processing
 
-An authenticated ADMIN sends `PATCH /api/orders/tracking/{orderId}/state` with the session cookie or HTTP Basic credentials and this body:
+An authenticated ADMIN sends `PATCH /api/orders/tracking/{orderId}/state` with the session cookie or HTTP Basic credentials and this body for an unassigned order:
 
 ```json
 {"state":"PROCESSING"}
 ```
 
 Status updates preserve `orders.estimated_delivery`, including null values and cancellation.
-They update only the order state and audit fields inside a write transaction.
+They update the order state and audit fields inside a write transaction.
+Entering SHIPPING or DELIVERED also queues a [demo notification](order-notifications.md) in that transaction.
 Supported progression is PENDING -> CONFIRMED (optional) -> PROCESSING -> SHIPPING -> DELIVERED; cancellation is allowed before SHIPPING.
 The target state must already exist in `order_states`.
 Unknown or missing request states return 400, invalid transitions return 400, missing/deleted orders or target states return 404, and USER accounts cannot update states.
 
-The state-update API returns a success response with `data: null`, including on same-state retries.
-Read the estimated date and remaining days through the tracking API instead of a separate delivery response.
+The state-update API returns the current state, shipper assignment, and delivery attempt ID in `data`, including on same-state retries.
+Assigned orders require `deliveryAttemptId`; assigned shippers may update delivery outcomes according to the [shipper delivery rules](shipper-delivery-api.md).
+Read the estimated date and remaining days through the tracking API.
 
 ## Read tracking
 

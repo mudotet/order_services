@@ -31,7 +31,7 @@ public class AuthService {
     private final HttpServletRequest request;
     private final HttpServletResponse response;
 
-    // Kiểm tra email, mật khẩu và vai trò rồi lưu phiên
+    // Validate the email, password, and roles, then save the session.
     public LoginResponse login(LoginRequest login) {
         if (login.getPassword().getBytes(StandardCharsets.UTF_8).length > 72) {
             throw new BadCredentialsException("Invalid credentials");

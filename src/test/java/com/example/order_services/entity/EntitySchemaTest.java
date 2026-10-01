@@ -12,6 +12,8 @@ import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.DriverManager;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -27,6 +29,12 @@ class EntitySchemaTest {
              var schema = new InputStreamReader(
                      getClass().getResourceAsStream("/entity-schema.sql"), StandardCharsets.UTF_8)) {
             RunScript.execute(connection, schema);
+            try (var migration = Files.newBufferedReader(Path.of("docs/sql/order-notifications.sql"))) {
+                RunScript.execute(connection, migration);
+            }
+            try (var migration = Files.newBufferedReader(Path.of("docs/sql/shipper-delivery.sql"))) {
+                RunScript.execute(connection, migration);
+            }
         }
         var configuration = new Configuration()
                 .setProperty("hibernate.connection.url", url)
@@ -92,7 +100,8 @@ class EntitySchemaTest {
             session.flush();
             session.clear();
             for (String entity : entities) {
-                assertThat(session.createQuery("from " + entity, Object.class).getResultList()).hasSize(1);
+                assertThat(session.createQuery("from " + entity, Object.class).getResultList())
+                        .hasSize(entity.equals("OrderState") ? 2 : 1);
             }
             assertThat(userRoles.findById(new UserRole.UserRoleId(user.getId(), role.getId()))).isPresent();
             assertThat(userRoles.findAllByUser_IdAndDeletedFalseAndRole_DeletedFalse(user.getId())).hasSize(1);

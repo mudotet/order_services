@@ -8,6 +8,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -23,6 +24,17 @@ import java.time.LocalDate;
         @CheckConstraint(name = "chk_orders_total", constraint = "total >= 0")
 })
 public class Order extends BaseEntity {
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "shipper_id")
+    private User shipper;
+
+    @Column(name = "assigned_at")
+    private LocalDateTime assignedAt;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "delivery_attempt_id", length = 36)
+    private String deliveryAttemptId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;

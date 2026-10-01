@@ -9,6 +9,7 @@ import com.example.order_services.dto.response.ProductInventoryResponse;
 import com.example.order_services.service.InventoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import org.springframework.data.domain.Page;
@@ -16,6 +17,7 @@ import org.springframework.data.domain.Page;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/inventories")
+@PreAuthorize("hasRole('ADMIN')")
 public class InventoryController {
     private final InventoryService inventoryService;
 
@@ -36,7 +38,7 @@ public class InventoryController {
     }
 
     // Search inventory by product name, including out-of-stock variants.
-    @GetMapping("/productsInStock")
+    @GetMapping("/products-in-stock")
     public BaseResponse<Page<ProductInventoryResponse>> getProductsInventoryInStockWithQuery(
             @RequestParam(name = "query", defaultValue = "") String query,
             @RequestParam(defaultValue = "0") int page) {

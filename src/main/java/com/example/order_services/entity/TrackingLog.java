@@ -1,5 +1,6 @@
 package com.example.order_services.entity;
 
+import com.example.order_services.common.DeliveryFailureReason;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -35,6 +36,15 @@ public class TrackingLog {
 
     @Column(name = "take_note", length = 500)
     private String takeNote;
+
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "failure_reason", length = 50)
+    private DeliveryFailureReason failureReason;
+
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "delivery_attempt_id", length = 36)
+    private String deliveryAttemptId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "location")

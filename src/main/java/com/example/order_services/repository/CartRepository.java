@@ -11,7 +11,7 @@ import java.util.Optional;
 public interface CartRepository extends JpaRepository<Cart, String> {
     Optional<Cart> findByUser_IdAndDeletedFalse(String userId);
 
-    // Điểm khóa chung cho sửa giỏ và tạo đơn; bên gọi cần transaction thích hợp để giữ khóa.
+    // Use a shared lock for cart updates and order creation; callers need an appropriate transaction to hold the lock.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from Cart c where c.user.id = :userId and c.deleted = false")
     Optional<Cart> findByUserIdForUpdate(@Param("userId") String userId);

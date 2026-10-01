@@ -19,7 +19,7 @@ public interface InventoryRepository extends JpaRepository<Inventory, String> {
     @EntityGraph(attributePaths = "productVariant")
     List<Inventory> findAllByProductVariantIdInAndDeletedFalse(Collection<String> productVariantIds);
 
-    // Khóa kho theo thứ tự ID biến thể nhất quán nhằm giảm nguy cơ deadlock khi xử lý nhiều biến thể.
+    // Lock inventory in a consistent variant ID order to reduce the risk of deadlocks when processing multiple variants.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select inventory from Inventory inventory

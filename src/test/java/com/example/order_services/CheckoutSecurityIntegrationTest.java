@@ -1,23 +1,22 @@
 package com.example.order_services;
 
 import com.example.order_services.common.DiscountType;
-import com.example.order_services.dto.request.UpdateInventoryQuantityRequest;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.exception.ApplicationException;
 import com.example.order_services.entity.*;
 import com.example.order_services.entity.Order;
 import com.example.order_services.repository.*;
 import com.example.order_services.service.CurrentUserService;
-import com.example.order_services.service.CartService;
-import com.example.order_services.service.DiscountService;
-import com.example.order_services.service.InventoryService;
 import com.example.order_services.service.OrderService;
+import com.example.order_services.service.NotificationJob;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationCredentialsNotFoundException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -73,10 +72,9 @@ class CheckoutSecurityIntegrationTest {
     @Autowired OrderStateRepository states;
     @Autowired OrderRepository orders;
     @Autowired CurrentUserService currentUserService;
-    @Autowired CartService cartService;
-    @Autowired DiscountService discountService;
-    @Autowired InventoryService inventoryService;
     @Autowired OrderService orderService;
+    @Autowired NotificationRepository notifications;
+    @Autowired NotificationJob notificationJob;
     @Autowired jakarta.persistence.EntityManager entityManager;
 
     MockMvc mvc;
@@ -117,6 +115,51 @@ class CheckoutSecurityIntegrationTest {
     }
 
     @Test
+    @DirtiesContext
+    @ExtendWith(OutputCaptureExtension.class)
+    void statusUpdatesQueueNotificationsAndScheduledJobLogsEachOnce(CapturedOutput output) throws Exception {
+        for (String state : List.of("PROCESSING", "SHIPPING", "DELIVERED")) {
+            states.save(OrderState.builder().state(state).build());
+        }
+        Order order = orders.save(Order.builder().user(alice).addressId("address-id")
+                .orderState(states.findByStateAndDeletedFalse("PENDING").orElseThrow()).build());
+        String path = "/api/orders/tracking/" + order.getId() + "/state";
+        String logPrefix = "[Notification] Order: " + order.getId();
+        for (String state : List.of("PROCESSING", "SHIPPING", "SHIPPING", "DELIVERED", "DELIVERED")) {
+            mvc.perform(authenticated(patch(path), "admin").contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"state\":\"" + state + "\"}"))
+                    .andExpect(status().isOk());
+            assertThat(notifications.count()).isEqualTo(switch (state) {
+                case "PROCESSING" -> 0;
+                case "SHIPPING" -> 1;
+                default -> 2;
+            });
+        }
+        assertThat(notifications.findAll()).allSatisfy(notification -> {
+            assertThat(notification.getOrderId()).isEqualTo(order.getId());
+            assertThat(notification.getCustomerName()).isEqualTo("alice");
+            assertThat(notification.getCustomerEmail()).isEqualTo("alice@example.com");
+            assertThat(notification.getProcessedAt()).isNull();
+        });
+        assertThat(output.getAll()).doesNotContain(logPrefix);
+        TestTransaction.flagForCommit();
+        TestTransaction.end();
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15);
+        while (notifications.findAll().stream().anyMatch(n -> n.getProcessedAt() == null)
+                && System.nanoTime() < deadline) {
+            Thread.sleep(100);
+        }
+        assertThat(notifications.findAll()).hasSize(2)
+                .allSatisfy(notification -> assertThat(notification.getProcessedAt()).isNotNull());
+        assertThat(output.getAll())
+                .contains(logPrefix + " | Customer: alice | Email: alice@example.com | Message: Đơn hàng của bạn đang trên đường giao")
+                .contains(logPrefix + " | Customer: alice | Email: alice@example.com | Message: Cảm ơn bạn đã mua hàng");
+        notificationJob.processNotifications();
+        assertThat(output.getAll().lines().filter(line -> line.contains(logPrefix)).count()).isEqualTo(2);
+    }
+
+    @Test
     void stateChangesPreserveSavedDeliveryDateAndTrackingCalculatesRemainingDays() throws Exception {
         states.save(OrderState.builder().state("PROCESSING").build());
         states.save(OrderState.builder().state("SHIPPING").build());
@@ -147,11 +190,11 @@ class CheckoutSecurityIntegrationTest {
             mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON)
                             .content("{\"state\":\"PENDING\"}"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data").value(org.hamcrest.Matchers.nullValue()));
+                    .andExpect(jsonPath("$.data.state").value("PENDING"));
             mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON)
                             .content("{\"state\":\"PROCESSING\"}"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data").value(org.hamcrest.Matchers.nullValue()));
+                    .andExpect(jsonPath("$.data.state").value("PROCESSING"));
             entityManager.flush();
             entityManager.clear();
             mvc.perform(get(trackingPath).header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
@@ -182,7 +225,7 @@ class CheckoutSecurityIntegrationTest {
                 mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"state\":\"" + next + "\"}"))
                         .andExpect(status().isOk())
-                        .andExpect(jsonPath("$.data").value(org.hamcrest.Matchers.nullValue()));
+                        .andExpect(jsonPath("$.data.state").value(next));
                 entityManager.flush();
                 entityManager.clear();
                 mvc.perform(get(trackingPath).header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
@@ -190,6 +233,13 @@ class CheckoutSecurityIntegrationTest {
                         .andExpect(jsonPath("$.data.estimatedDelivery").value(today.minusDays(1).toString()))
                         .andExpect(jsonPath("$.data.daysRemaining").value(0));
             }
+            orders.findById(order.getId()).orElseThrow().setPaymentId(null);
+            entityManager.flush();
+            entityManager.clear();
+            mvc.perform(get(trackingPath).header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.orderTrackingId").value(order.getId()))
+                    .andExpect(jsonPath("$.data.paymentMethodInfo").value(org.hamcrest.Matchers.nullValue()));
             Order cancelled = orders.save(Order.builder().user(alice).addressId(address.getId())
                     .paymentId(payment.getId()).estimatedDelivery(today.plusDays(7))
                     .orderState(states.findByStateAndDeletedFalse("PENDING").orElseThrow()).build());
@@ -243,7 +293,7 @@ class CheckoutSecurityIntegrationTest {
         mvc.perform(authenticated(patch(statePath), "admin").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"state\":\"CANCELLED\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").value(org.hamcrest.Matchers.nullValue()));
+                .andExpect(jsonPath("$.data.state").value("CANCELLED"));
         mvc.perform(get("/api/orders/tracking/" + order.getId())
                         .header(HttpHeaders.AUTHORIZATION, basic("alice", "password")))
                 .andExpect(status().isOk())
@@ -307,11 +357,15 @@ class CheckoutSecurityIntegrationTest {
                         .flatMap(path -> mapping.getMethodsCondition().getMethods().stream()
                                 .map(method -> method + " " + path))).toList();
         assertThat(routes).containsExactlyInAnyOrder(
-                "GET /api/carts", "GET /api/discounts", "POST /api/orders/summary", "POST /api/orders",
+                "GET /api/carts", "GET /api/discounts", "POST /api/orders/orders/summary", "POST /api/orders",
                 "PUT /api/inventories/{productVariantId}/quantity", "PATCH /api/carts/items/{cartItemId}/quantity",
                 "GET /api/orders/tracking/{id}", "GET /api/orders/returns",
                 "GET /api/orders/returns/{id}", "GET /api/orders/returns/summary!", "PATCH /api/orders/tracking/{id}/state",
-                "POST /api/auth/login");
+                "POST /api/auth/login", "GET /api/orders/return/export",
+                "GET /api/inventories", "GET /api/inventories/products-in-stock",
+                "PATCH /api/inventories/productsInStock/{productId}/variants/{variantsId}",
+                "POST /api/products", "POST /api/products/{productId}/variants",
+                "PATCH /api/orders/{id}/shipper", "GET /api/shipper/orders/{id}", "PATCH /api/shipper/orders/{id}/state");
     }
 
     @Test
@@ -422,17 +476,13 @@ class CheckoutSecurityIntegrationTest {
     }
 
     @Test
-    void inventoryRequiresAdminEvenWhenServiceIsCalledDirectly() throws Exception {
+    void inventoryRequiresAdminAtControllerBoundary() throws Exception {
         mvc.perform(authenticated(put("/api/inventories/" + variant.getId() + "/quantity"), "alice")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":12}"))
                 .andExpect(status().isForbidden());
         mvc.perform(authenticated(put("/api/inventories/" + variant.getId() + "/quantity"), "admin")
                 .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\":12}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.quantityInStock").value(12));
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                alice.getEmail(), null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
-        assertThatThrownBy(() -> inventoryService.updateQuantity(variant.getId(), new UpdateInventoryQuantityRequest(1)))
-                .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
@@ -555,33 +605,30 @@ class CheckoutSecurityIntegrationTest {
     }
 
     @Test
-    void servicePermissionsSeparateCustomerAndAdminActions() {
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                "admin@example.com",
-                null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
-        assertThat(currentUserService.getCurrentUser().getUserName()).isEqualTo("admin");
-        for (Runnable action : List.<Runnable>of(
-                cartService::getCartDetail,
-                () -> cartService.adjustCartItemQuantity("missing", null),
-                discountService::getDiscounts,
-                () -> orderService.calculateOrderSummary(null),
-                () -> orderService.createOrder(null),
-                () -> orderService.getTrackingOrderInfo("missing"))) {
-            assertThatThrownBy(action::run).isInstanceOf(AccessDeniedException.class);
+    void controllerPermissionsSeparateCustomerAndAdminActions() throws Exception {
+        for (var request : List.of(
+                get("/api/carts"),
+                patch("/api/carts/items/missing/quantity").content("{\"quantityChange\":1}"),
+                get("/api/discounts"),
+                post("/api/orders/orders/summary").content("{}"),
+                post("/api/orders").content("{\"addressId\":\"address-id\",\"paymentId\":\"payment-id\"}"),
+                get("/api/orders/tracking/missing"))) {
+            mvc.perform(authenticated(request, "admin").contentType(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isForbidden());
         }
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                alice.getEmail(), null, List.of(new SimpleGrantedAuthority("ROLE_USER"))));
-        assertThat(currentUserService.getCurrentUser().getUserName()).isEqualTo("alice");
-        for (Runnable action : List.<Runnable>of(
-                () -> inventoryService.updateQuantity("missing", null),
-                orderService::calculateOrderReturnSummary,
-                () -> orderService.getOrderReturns(0, 4, "all requests"),
-                () -> orderService.viewOrderReturnDetail("missing"))) {
-            assertThatThrownBy(action::run).isInstanceOf(AccessDeniedException.class);
+        for (var request : List.of(
+                get("/api/inventories"),
+                put("/api/inventories/missing/quantity").content("{\"quantity\":1}"),
+                get("/api/orders/returns/summary!"),
+                get("/api/orders/returns"),
+                get("/api/orders/returns/missing"),
+                get("/api/orders/return/export"),
+                get("/api/shipper/orders/missing"))) {
+            mvc.perform(authenticated(request, "alice").contentType(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isForbidden());
         }
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                bob.getEmail(), null, List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
-        assertThat(orderService.calculateOrderReturnSummary()).isNotNull();
+        mvc.perform(authenticated(get("/api/orders/returns/summary!"), "admin"))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -590,7 +637,7 @@ class CheckoutSecurityIntegrationTest {
         assertThatThrownBy(currentUserService::getCurrentUser).isInstanceOf(AuthenticationCredentialsNotFoundException.class);
         SecurityContextHolder.getContext().setAuthentication(new AnonymousAuthenticationToken(
                 "key", "alice", List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS"))));
-        assertThatThrownBy(currentUserService::getCurrentUser).isInstanceOf(AccessDeniedException.class);
+        assertThatThrownBy(currentUserService::getCurrentUser).isInstanceOf(AuthenticationCredentialsNotFoundException.class);
     }
 
     @Test

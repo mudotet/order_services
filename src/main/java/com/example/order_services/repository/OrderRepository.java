@@ -2,6 +2,7 @@ package com.example.order_services.repository;
 
 import com.example.order_services.entity.Order;
 import com.example.order_services.dto.response.TrackingOrderDetailResponse;
+import com.example.order_services.dto.response.ShipperOrderResponse;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
@@ -15,13 +16,26 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     Optional<Order> findByIdAndDeletedFalse(String id);
 
     @Query("""
+            select new com.example.order_services.dto.response.ShipperOrderResponse(
+                orders.id, orders.orderState.state, orders.deliveryAttemptId,
+                orders.user.userName, orders.user.phoneNumber, address.address, address.city,
+                coalesce((select sum(item.quantity) from OrderItem item
+                    where item.order = orders and item.deleted = false), 0L),
+                orders.assignedAt, orders.estimatedDelivery, null)
+            from Order orders left join Address address on address.id = orders.addressId
+            where orders.shipper.id = :shipperId and orders.deleted = false and orders.user.deleted = false
+              and orders.id = :orderId
+            """)
+    Optional<ShipperOrderResponse> findShipperOrder(@Param("orderId") String orderId, @Param("shipperId") String shipperId);
+
+    @Query("""
             select new com.example.order_services.dto.response.TrackingOrderDetailResponse(
                 orders.id, state.state, null, orders.total, address.address, payment.paymentMethod,
                 address.city, orders.estimatedDelivery, null)
             from Order orders
             join orders.orderState state
             join Address address on address.id = orders.addressId
-            join Payment payment on payment.id = orders.paymentId
+            left join Payment payment on payment.id = orders.paymentId
             where orders.id = :orderId and orders.user.id = :userId
               and orders.deleted = false and orders.user.deleted = false
             """)

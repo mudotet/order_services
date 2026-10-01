@@ -2,13 +2,14 @@ package com.example.order_services.service;
 
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.UpdateOrderStateRequest;
+import com.example.order_services.dto.request.AssignShipperRequest;
 import com.example.order_services.dto.response.*;
 import org.springframework.data.domain.Page;
 
 import java.io.IOException;
 import java.nio.file.Path;
 
-/** Đặt và theo dõi đơn cho người dùng; quản lý đơn trả hàng cho admin. */
+/** Place and track orders for users; manage order returns for admins. */
 public interface OrderService {
     OrderSummaryResponse calculateOrderSummary(String discountId);
     OrderResponse createOrder(CreateOrderRequest request);
@@ -24,5 +25,7 @@ public interface OrderService {
 
     TrackingOrderDetailResponse getTrackingOrderInfo(String id);
 
-    void updateOrderState(String id, UpdateOrderStateRequest request);
+    OrderDeliveryResponse updateOrderState(String id, UpdateOrderStateRequest request);
+
+    OrderDeliveryResponse assignShipper(String id, AssignShipperRequest request);
 }

@@ -21,7 +21,7 @@ public enum DeliveryZone {
         this.cities = cities;
     }
 
-    // ponytail: danh sách vùng cố định
+    // ponytail: fixed list of regions
     public static DeliveryZone fromCity(String city) {
         String normalized = Normalizer.normalize(city.strip().toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "").replace('đ', 'd').replaceAll("\\s+", " ");

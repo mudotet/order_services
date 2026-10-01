@@ -13,13 +13,19 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Chuyển exception tại tầng MVC thành HTTP status và cấu trúc BaseResponse thống nhất. */
+/** Convert MVC-layer exceptions into HTTP statuses and a consistent BaseResponse structure. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<BaseResponse<Void>> handleUnsupportedContentType() {
+        return ResponseEntity.status(415).body(BaseResponse.error(EnumCode.UNSUPPORTED_MEDIA_TYPE, "Unsupported content type"));
+    }
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     ResponseEntity<BaseResponse<Void>> handleRouteNotFound() {
@@ -52,7 +58,7 @@ public class GlobalExceptionHandler {
     ResponseEntity<BaseResponse<Void>> handleValidationException(
             MethodArgumentNotValidException exception
     ) {
-        // Trả lỗi theo tên trường để giao diện gắn thông báo vào ô nhập tương ứng.
+        // Return errors by field name so the UI can attach messages to the corresponding inputs.
         Map<String, String> errors = new LinkedHashMap<>();
         exception.getBindingResult().getFieldErrors()
                 .forEach(error -> errors.put(error.getField(), error.getDefaultMessage()));
@@ -66,7 +72,7 @@ public class GlobalExceptionHandler {
                 .body(BaseResponse.error(EnumCode.BAD_REQUEST, "Invalid related resource"));
     }
 
-    // Lỗi chưa được phân loại trả thông báo chung, tránh đưa chi tiết nội bộ ra response.
+    // Return a generic message for unclassified errors to avoid exposing internal details in the response.
     @ExceptionHandler(Exception.class)
     ResponseEntity<BaseResponse<Void>> handleUnexpectedException() {
         return ResponseEntity.internalServerError()

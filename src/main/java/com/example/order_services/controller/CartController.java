@@ -6,11 +6,13 @@ import com.example.order_services.dto.response.CartDetailResponse;
 import com.example.order_services.service.CartService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/carts")
+@PreAuthorize("hasRole('USER')")
 public class CartController {
     private final CartService cartService;
 
