@@ -25,6 +25,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -87,6 +88,7 @@ public class OrderServiceImpl implements OrderService {
         TrackingOrderDetailResponse tracking = orderRepository.findTrackingOrderInfo(orderId, userId)
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order not found"));
         tracking.setPurchasedItems(orderItemRepository.findPurchasedItems(orderId, userId));
+        tracking.setRecipientName(trackingLogRepository.findRecipientName(orderId).orElse(null));
         if (OrderStatus.CANCELLED.name().equals(tracking.getOrderTrackingStatus())) {
             tracking.setEstimatedDelivery(null);
             tracking.setDaysRemaining(null);
@@ -101,6 +103,7 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
+    @PreAuthorize("hasRole('ADMIN')")
     public OrderDeliveryResponse assignShipper(String id, AssignShipperRequest request) {
         User admin = currentUserService.getCurrentUser();
         Order order = orderRepository.findByIdAndDeletedFalse(id)
@@ -138,6 +141,10 @@ public class OrderServiceImpl implements OrderService {
         if (!isAdmin && (order.getShipper() == null || !order.getShipper().getId().equals(actor.getId()))) {
             throw new ApplicationException(EnumCode.NOT_FOUND, "Order not found");
         }
+        if (!isAdmin && SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .noneMatch(authority -> authority.getAuthority().equals("ROLE_SHIPPER"))) {
+            throw new ApplicationException(EnumCode.FORBIDDEN, "SHIPPER role required");
+        }
         OrderStatus current = OrderStatus.valueOf(order.getOrderState().getState());
         OrderStatus next = request.getState();
         if (!isAdmin && (!Set.of(OrderStatus.SHIPPING, OrderStatus.DELIVERED, OrderStatus.DELIVERY_FAILED).contains(next)
@@ -150,6 +157,20 @@ public class OrderServiceImpl implements OrderService {
         if ((order.getShipper() != null || request.getDeliveryAttemptId() != null)
                 && !Objects.equals(order.getDeliveryAttemptId(), request.getDeliveryAttemptId())) {
             throw new ApplicationException(EnumCode.CONFLICT, "Delivery attempt changed; reload the order");
+        }
+        String recipientName = request.getRecipientName() == null ? null : request.getRecipientName().strip();
+        if (next == OrderStatus.DELIVERED) {
+            if (recipientName == null || recipientName.isBlank() || recipientName.length() > 255) {
+                throw new ApplicationException(EnumCode.BAD_REQUEST, "recipientName is required and must not exceed 255 characters for DELIVERED");
+            }
+        } else if (request.getRecipientName() != null) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "recipientName is only valid for DELIVERED");
+        }
+        if (next == OrderStatus.SHIPPING && order.getShipper() == null) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Admin must assign a shipper before delivery");
+        }
+        if (request.getNote() != null && request.getNote().length() > 500) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Note must not exceed 500 characters");
         }
         String note = request.getNote() == null ? null : request.getNote().strip();
         if (next == OrderStatus.DELIVERY_FAILED) {
@@ -183,7 +204,7 @@ public class OrderServiceImpl implements OrderService {
         trackingLogRepository.save(TrackingLog.builder().order(order).oldStatus(order.getOrderState())
                 .newStatus(state).createdBy(actor.getId()).createdAt(LocalDateTime.now(DELIVERY_TIME_ZONE))
                 .deliveryAttemptId(order.getDeliveryAttemptId()).failureReason(request.getFailureReason())
-                .takeNote(note).build());
+                .takeNote(note).recipientName(recipientName).build());
         order.setOrderState(state);
         order.setUpdatedBy(actor.getId());
         orderRepository.save(order);
@@ -208,7 +229,8 @@ public class OrderServiceImpl implements OrderService {
     private OrderDeliveryResponse deliveryResponse(Order order) {
         return new OrderDeliveryResponse(order.getId(), order.getOrderState().getState(),
                 order.getShipper() == null ? null : order.getShipper().getId(),
-                order.getDeliveryAttemptId(), order.getAssignedAt());
+                order.getDeliveryAttemptId(), order.getAssignedAt(),
+                trackingLogRepository.findRecipientName(order.getId()).orElse(null));
     }
 
     // Summarize order return counts and refund amounts for admins.

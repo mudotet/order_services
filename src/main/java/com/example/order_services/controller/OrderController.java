@@ -96,7 +96,7 @@ public class OrderController {
 
     // Admins manage fulfillment; assigned shippers can record delivery outcomes.
     @PatchMapping("/tracking/{id}/state")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SHIPPER')")
+    @PreAuthorize("hasRole('ADMIN')")
     public BaseResponse<OrderDeliveryResponse> updateOrderState(@PathVariable String id,
                                              @Valid @RequestBody UpdateOrderStateRequest request) {
         return BaseResponse.success(orderService.updateOrderState(id, request));

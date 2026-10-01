@@ -35,4 +35,10 @@ public class Notification extends BaseEntity {
 
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
+
+    @Column(nullable = false)
+    private int attempts;
+
+    @Column(name = "last_error", length = 500)
+    private String lastError;
 }

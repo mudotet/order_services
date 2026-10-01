@@ -1,6 +1,6 @@
 # Order Service APIs Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> Historical implementation plan from 2026-08-25, not an active task list. Its endpoint scope, transaction assumptions, and dependency restrictions describe the original feature and may no longer match the code. For current work, follow [AGENTS.md](../../../AGENTS.md), [README](../../../README.md), and the requested feature spec. Unchecked boxes below do not authorize reimplementation.
 
 **Goal:** Build the five approved order-service APIs with a beginner-friendly Spring MVC, service, repository, and JPA structure.
 

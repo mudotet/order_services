@@ -15,19 +15,19 @@ An authenticated ADMIN sends `PATCH /api/orders/tracking/{orderId}/state` with t
 
 Status updates preserve `orders.estimated_delivery`, including null values and cancellation.
 They update the order state and audit fields inside a write transaction.
-Entering SHIPPING or DELIVERED also queues a [demo notification](order-notifications.md) in that transaction.
-Supported progression is PENDING -> CONFIRMED (optional) -> PROCESSING -> SHIPPING -> DELIVERED; cancellation is allowed before SHIPPING.
+Entering SHIPPING or DELIVERED also queues a [demo notification](../README.md#notifications) in that transaction.
+Supported progression is PENDING -> CONFIRMED (optional) -> PROCESSING -> SHIPPING -> DELIVERED or DELIVERY_FAILED; cancellation is allowed before SHIPPING. SHIPPING requires a shipper assignment. Only admins can retry DELIVERY_FAILED -> SHIPPING, and the retry creates a new delivery-attempt token.
 The target state must already exist in `order_states`.
 Unknown or missing request states return 400, invalid transitions return 400, missing/deleted orders or target states return 404, and USER accounts cannot update states.
 
 The state-update API returns the current state, shipper assignment, and delivery attempt ID in `data`, including on same-state retries.
-Assigned orders require `deliveryAttemptId`; assigned shippers may update delivery outcomes according to the [shipper delivery rules](shipper-delivery-api.md).
+Assigned orders require `deliveryAttemptId`; assigned shippers may update delivery outcomes according to the [shipper delivery rules](../README.md#shipper-delivery).
 Read the estimated date and remaining days through the tracking API.
 
 ## Read tracking
 
 The owning USER calls `GET /api/orders/tracking/{orderId}` as before.
-The response's `data` contains all nine tracking fields:
+The response's `data` contains these ten tracking fields:
 
 ```json
 {
@@ -46,11 +46,12 @@ The response's `data` contains all nine tracking fields:
   "paymentMethodInfo": "CASH",
   "shippingCity": "Hà Nội",
   "estimatedDelivery": "2026-09-21",
-  "daysRemaining": 1
+  "daysRemaining": 1,
+  "recipientName": "Customer name"
 }
 ```
 
-`estimatedDelivery` is a Java `LocalDate`, serialized as `yyyy-MM-dd`; `daysRemaining` is an `Integer`.
+`recipientName` is the order customer's name. `estimatedDelivery` is a Java `LocalDate`, serialized as `yyyy-MM-dd`; `daysRemaining` is an `Integer`.
 Tracking reads `estimatedDelivery` directly from `orders.estimated_delivery` and does not calculate a replacement date.
 If the saved date is missing for a nonterminal order, both estimate fields are null, even when its city is available.
 `daysRemaining` is the number of days from today in `Asia/Ho_Chi_Minh` to the returned date, clamped at zero.

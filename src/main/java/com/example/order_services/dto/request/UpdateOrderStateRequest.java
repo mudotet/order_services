@@ -23,4 +23,7 @@ public class UpdateOrderStateRequest {
 
     @Size(max = 500)
     private String note;
+
+    @Size(max = 255)
+    private String recipientName;
 }

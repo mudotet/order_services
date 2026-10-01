@@ -5,8 +5,8 @@ the Username field contains `users.email`, and the password is the original pass
 Role names in the database are `USER` / `ADMIN`, without the `ROLE_` prefix.
 
 Learning-stage limitation: the user has deferred restoring the write transaction on `createOrder`.
-Two existing checkout concurrency/rollback tests remain failing. The current checkout must not be
-used for real orders; a success response does not guarantee that all changes were persisted.
+The checkout concurrency/rollback tests describe guarantees the current implementation may not satisfy.
+The current checkout must not be used for real orders; a success response does not guarantee that all changes were persisted.
 
 ## Routes
 
@@ -15,7 +15,7 @@ used for real orders; a success response does not guarantee that all changes wer
 | GET | `/api/carts` | none | USER |
 | PATCH | `/api/carts/items/{cartItemId}/quantity` | `{"quantityChange":1}` or `{"quantityChange":-1}` | USER |
 | GET | `/api/discounts` | none | USER |
-| POST | `/api/orders/summary` | `{}` or `{"discountId":"…"}` | USER |
+| POST | `/api/orders/orders/summary` | `{}` or `{"discountId":"…"}` | USER |
 | POST | `/api/orders` | `{"discountId":"…","addressId":"…","paymentId":"…"}` | USER |
 | GET | `/api/orders/tracking/{id}` | none | USER, order owner |
 | PUT | `/api/inventories/{productVariantId}/quantity` | `{"quantity":20}` | ADMIN |
@@ -27,7 +27,7 @@ Product, discount, address and payment IDs identify other selected resources.
 
 Inventory `quantity` is the exact new nonnegative stock level. Cart `quantityChange` is a relative
 change of exactly 1 or -1.
-The table covers checkout, inventory, and order tracking.
+The table covers checkout, inventory, and order tracking. The repeated `/orders` in the summary URL is the current controller mapping; it is not a typo in this guide.
 
 ## POST, PUT and PATCH in Postman
 

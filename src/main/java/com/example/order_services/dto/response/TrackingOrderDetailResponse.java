@@ -21,4 +21,5 @@ public class TrackingOrderDetailResponse {
     private String shippingCity;
     private LocalDate estimatedDelivery;
     private Integer daysRemaining;
+    private String recipientName;
 }
