@@ -17,7 +17,7 @@ import org.springframework.security.web.authentication.session.SessionAuthentica
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 
-/** Allow public access to login; other APIs require authentication and service-level authorization. */
+/** Allow public access to login; other APIs require authentication and controller-level authorization. */
 @Configuration
 @EnableMethodSecurity
 public class SecurityConfig {

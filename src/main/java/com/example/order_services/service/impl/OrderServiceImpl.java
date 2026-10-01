@@ -7,6 +7,8 @@ import com.alibaba.excel.write.metadata.WriteSheet;
 import com.example.order_services.common.DiscountType;
 import com.example.order_services.common.EnumCode;
 import com.example.order_services.common.OrderStatus;
+import com.example.order_services.common.DeliveryFailureReason;
+import com.example.order_services.dto.request.AssignShipperRequest;
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.UpdateOrderStateRequest;
 import com.example.order_services.dto.response.*;
@@ -22,7 +24,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +46,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -70,12 +74,14 @@ public class OrderServiceImpl implements OrderService {
     private final CurrentUserService currentUserService;
     private final ModelMapper modelMapper;
     private final UserRepository userRepository;
+    private final NotificationRepository notificationRepository;
+    private final TrackingLogRepository trackingLogRepository;
+    private final UserRoleRepository userRoleRepository;
 
 
 
     // Fetch tracking information for an order belonging to the signed-in user.
     @Override
-    @PreAuthorize("hasRole('USER')")
     public TrackingOrderDetailResponse getTrackingOrderInfo(String orderId) {
         String userId = currentUserService.getCurrentUser().getId();
         TrackingOrderDetailResponse tracking = orderRepository.findTrackingOrderInfo(orderId, userId)
@@ -93,24 +99,76 @@ public class OrderServiceImpl implements OrderService {
         return tracking;
     }
 
-    // Allow admins to change the status while preserving the stored estimated delivery date.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     @Transactional
-    public void updateOrderState(String id, UpdateOrderStateRequest request) {
+    public OrderDeliveryResponse assignShipper(String id, AssignShipperRequest request) {
         User admin = currentUserService.getCurrentUser();
         Order order = orderRepository.findByIdAndDeletedFalse(id)
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order not found"));
+        if (!Set.of("PROCESSING", "DELIVERY_FAILED").contains(order.getOrderState().getState())) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Assign a shipper only before delivery or after a failed attempt");
+        }
+        User shipper = userRepository.findById(request.getShipperId())
+                .filter(user -> !user.isDeleted())
+                .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Shipper not found"));
+        boolean hasRole = userRoleRepository.findAllByUser_IdAndDeletedFalseAndRole_DeletedFalse(shipper.getId())
+                .stream().anyMatch(role -> role.getRole().getRoleName().equals("SHIPPER"));
+        if (!hasRole) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Selected user must have an active SHIPPER role");
+        }
+        if (order.getShipper() == null || !order.getShipper().getId().equals(shipper.getId())) {
+            order.setShipper(shipper);
+            order.setAssignedAt(LocalDateTime.now(DELIVERY_TIME_ZONE));
+            order.setDeliveryAttemptId(UUID.randomUUID().toString());
+            order.setUpdatedBy(admin.getId());
+            orderRepository.save(order);
+        }
+        return deliveryResponse(order);
+    }
+
+    // Keep status, tracking history and notifications in the same locked transaction.
+    @Override
+    @Transactional
+    public OrderDeliveryResponse updateOrderState(String id, UpdateOrderStateRequest request) {
+        User actor = currentUserService.getCurrentUser();
+        boolean isAdmin = SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        Order order = orderRepository.findByIdAndDeletedFalse(id)
+                .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order not found"));
+        if (!isAdmin && (order.getShipper() == null || !order.getShipper().getId().equals(actor.getId()))) {
+            throw new ApplicationException(EnumCode.NOT_FOUND, "Order not found");
+        }
         OrderStatus current = OrderStatus.valueOf(order.getOrderState().getState());
         OrderStatus next = request.getState();
+        if (!isAdmin && (!Set.of(OrderStatus.SHIPPING, OrderStatus.DELIVERED, OrderStatus.DELIVERY_FAILED).contains(next)
+                || current == OrderStatus.DELIVERY_FAILED && next == OrderStatus.SHIPPING)) {
+            throw new ApplicationException(EnumCode.FORBIDDEN, "Only admins can manage fulfillment or retry a failed delivery");
+        }
+        if (order.getShipper() != null && request.getDeliveryAttemptId() == null) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "deliveryAttemptId is required for assigned orders");
+        }
+        if ((order.getShipper() != null || request.getDeliveryAttemptId() != null)
+                && !Objects.equals(order.getDeliveryAttemptId(), request.getDeliveryAttemptId())) {
+            throw new ApplicationException(EnumCode.CONFLICT, "Delivery attempt changed; reload the order");
+        }
+        String note = request.getNote() == null ? null : request.getNote().strip();
+        if (next == OrderStatus.DELIVERY_FAILED) {
+            if (request.getFailureReason() == null || request.getFailureReason() == DeliveryFailureReason.OTHER
+                    && (note == null || note.isBlank())) {
+                throw new ApplicationException(EnumCode.BAD_REQUEST, "A failure reason is required; OTHER also requires a note");
+            }
+        } else if (request.getFailureReason() != null) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "failureReason is only valid for DELIVERY_FAILED");
+        }
         if (next == current) {
-            return;
+            return deliveryResponse(order);
         }
         boolean allowed = switch (current) {
             case PENDING -> next == OrderStatus.CONFIRMED || next == OrderStatus.PROCESSING || next == OrderStatus.CANCELLED;
             case CONFIRMED -> next == OrderStatus.PROCESSING || next == OrderStatus.CANCELLED;
             case PROCESSING -> next == OrderStatus.SHIPPING || next == OrderStatus.CANCELLED;
-            case SHIPPING -> next == OrderStatus.DELIVERED;
+            case SHIPPING -> next == OrderStatus.DELIVERED || next == OrderStatus.DELIVERY_FAILED;
+            case DELIVERY_FAILED -> isAdmin && next == OrderStatus.SHIPPING;
             case DELIVERED, CANCELLED -> false;
         };
         if (!allowed) {
@@ -118,14 +176,43 @@ public class OrderServiceImpl implements OrderService {
         }
         OrderState state = orderStateRepository.findByStateAndDeletedFalse(next.name())
                 .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Order state not found"));
+        // A retry gets a new token; an old phone request must never complete a later attempt.
+        if (current == OrderStatus.DELIVERY_FAILED || next == OrderStatus.SHIPPING && order.getDeliveryAttemptId() == null) {
+            order.setDeliveryAttemptId(UUID.randomUUID().toString());
+        }
+        trackingLogRepository.save(TrackingLog.builder().order(order).oldStatus(order.getOrderState())
+                .newStatus(state).createdBy(actor.getId()).createdAt(LocalDateTime.now(DELIVERY_TIME_ZONE))
+                .deliveryAttemptId(order.getDeliveryAttemptId()).failureReason(request.getFailureReason())
+                .takeNote(note).build());
         order.setOrderState(state);
-        order.setUpdatedBy(admin.getId());
+        order.setUpdatedBy(actor.getId());
         orderRepository.save(order);
+        String message = switch (next) {
+            case SHIPPING -> "Đơn hàng của bạn đang trên đường giao";
+            case DELIVERED -> "Cảm ơn bạn đã mua hàng";
+            default -> null;
+        };
+        if (message != null) {
+            Notification notification = Notification.builder()
+                    .orderId(order.getId())
+                    .customerName(order.getUser().getUserName())
+                    .customerEmail(order.getUser().getEmail())
+                    .message(message)
+                    .build();
+            notification.setCreatedBy(actor.getId());
+            notificationRepository.save(notification);
+        }
+        return deliveryResponse(order);
+    }
+
+    private OrderDeliveryResponse deliveryResponse(Order order) {
+        return new OrderDeliveryResponse(order.getId(), order.getOrderState().getState(),
+                order.getShipper() == null ? null : order.getShipper().getId(),
+                order.getDeliveryAttemptId(), order.getAssignedAt());
     }
 
     // Summarize order return counts and refund amounts for admins.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     public OrderReturnsSummaryResponse calculateOrderReturnSummary() {
         currentUserService.getCurrentUser();
 
@@ -178,7 +265,6 @@ public class OrderServiceImpl implements OrderService {
 
     // Calculate the subtotal, discount, shipping fee, and total from the user's cart.
     @Override
-    @PreAuthorize("hasRole('USER')")
     public OrderSummaryResponse calculateOrderSummary(String discountId) {
         User user = currentUserService.getCurrentUser();
         Cart cart = cartRepository.findByUser_IdAndDeletedFalse(user.getId())
@@ -188,7 +274,6 @@ public class OrderServiceImpl implements OrderService {
 
     // Create an order from the user's cart, update inventory, and mark the discount code as used.
     @Override
-    @PreAuthorize("hasRole('USER')")
     public OrderResponse createOrder(CreateOrderRequest request) {
         User user = currentUserService.getCurrentUser();
 
@@ -312,7 +397,6 @@ public class OrderServiceImpl implements OrderService {
 
     // Fetch order returns for admins, with pagination and status filtering.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     public Page<OrderReturnResponse> getOrderReturns(int page, int size, String filterBy) {
         currentUserService.getCurrentUser();
         if (page < 0 || size < 1 || size > 100) {
@@ -336,7 +420,6 @@ public class OrderServiceImpl implements OrderService {
 
     // Write each batch to the CSV file, using the last ID in the batch as the next cursor.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
     public Path exportOrderReturns(String filterBy) throws IOException {
         currentUserService.getCurrentUser();
@@ -393,7 +476,6 @@ public class OrderServiceImpl implements OrderService {
 
     // Fetch order return details and returned items for admins.
     @Override
-    @PreAuthorize("hasRole('ADMIN')")
     public ViewOrderDetailResponse viewOrderReturnDetail(String id) {
         currentUserService.getCurrentUser();
         OrderReturn orderReturn = orderReturnRepository.findByIdAndDeletedFalse(id)

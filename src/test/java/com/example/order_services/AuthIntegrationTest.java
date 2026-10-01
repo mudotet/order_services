@@ -115,7 +115,7 @@ class AuthIntegrationTest {
                 mvc.perform(patch("/api/orders/tracking/missing/state").session(session)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"state\":\"SHIPPING\"}"))
-                        .andExpect(status().isForbidden());
+                        .andExpect(status().isNotFound());
             }
         }
     }

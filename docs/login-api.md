@@ -34,11 +34,14 @@ The client does not choose its role; role fields in a request cannot grant permi
 Accounts may have multiple supported roles.
 Incorrect credentials, deleted accounts and accounts with no active supported role return 401 without revealing which check failed.
 Invalid input returns 400; authenticated accounts without the required role receive 403 on protected APIs.
+Controllers declare role requirements with `@PreAuthorize`.
+Services retain current-user validation and order ownership or shipper-assignment checks, but direct service calls do not pass through controller role checks.
 Passwords must match the existing BCrypt `password_hash`, with a maximum of 72 UTF-8 bytes.
 No password or hash is returned.
 
 SHIPPER can log in but does not inherit USER or ADMIN access.
-Existing order-state updates remain ADMIN-only until shipper-specific permissions are defined.
+Shippers can read their assigned orders and record delivery outcomes through the [shipper delivery APIs](shipper-delivery-api.md).
+Only admins assign shippers or authorize delivery retries.
 HTTP Basic access also requires email in its Username field; display names are not accepted for authentication.
 Spring calls its login identifier `username`, but this application stores the account's unique email there.
 The required `UserDetailsService.loadUserByUsername(String email)` method receives the email extracted from `LoginRequest`; it does not take the whole request DTO.

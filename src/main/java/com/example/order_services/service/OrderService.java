@@ -2,6 +2,7 @@ package com.example.order_services.service;
 
 import com.example.order_services.dto.request.CreateOrderRequest;
 import com.example.order_services.dto.request.UpdateOrderStateRequest;
+import com.example.order_services.dto.request.AssignShipperRequest;
 import com.example.order_services.dto.response.*;
 import org.springframework.data.domain.Page;
 
@@ -24,5 +25,7 @@ public interface OrderService {
 
     TrackingOrderDetailResponse getTrackingOrderInfo(String id);
 
-    void updateOrderState(String id, UpdateOrderStateRequest request);
+    OrderDeliveryResponse updateOrderState(String id, UpdateOrderStateRequest request);
+
+    OrderDeliveryResponse assignShipper(String id, AssignShipperRequest request);
 }

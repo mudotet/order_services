@@ -5,7 +5,6 @@ import com.example.order_services.repository.UserDiscountRepository;
 import com.example.order_services.service.CurrentUserService;
 import com.example.order_services.service.DiscountService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,7 +13,6 @@ import java.util.List;
 /** Provide available discount codes for the signed-in user. */
 @Service
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('USER')")
 @Transactional(readOnly = true)
 public class DiscountServiceImpl implements DiscountService {
     private final UserDiscountRepository userDiscountRepository;

@@ -11,6 +11,17 @@ import java.util.List;
 public interface OrderItemRepository extends JpaRepository<OrderItem, String> {
     @Query("""
             select new com.example.order_services.dto.response.PurchasedItemResponse(
+                item.productVariant.product.productName, item.productVariant.productVariant,
+                item.quantity, item.unitPrice)
+            from OrderItem item
+            where item.order.id = :orderId and item.order.shipper.id = :shipperId
+              and item.deleted = false and item.order.deleted = false and item.order.user.deleted = false
+            order by item.createdAt, item.id
+            """)
+    List<PurchasedItemResponse> findShipperItems(@Param("orderId") String orderId, @Param("shipperId") String shipperId);
+
+    @Query("""
+            select new com.example.order_services.dto.response.PurchasedItemResponse(
                 product.productName, variant.productVariant, item.quantity, item.unitPrice)
             from OrderItem item
             join item.productVariant variant

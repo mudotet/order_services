@@ -16,7 +16,9 @@ business APIs; the extra CSRF-token endpoint remains removed.
 - Only `CurrentUserService` reads `SecurityContextHolder`. It resolves `Authentication.getName()`
   through an active-user lookup. Cart, discount and order services call it themselves.
 - Controllers neither receive current-user IDs nor resolve principals. Old user-ID routes are removed.
-- Service methods require `USER`; inventory changes require `ADMIN`.
+- Controller endpoints enforce role requirements with `@PreAuthorize`; customer endpoints require `USER` and inventory endpoints require `ADMIN`.
+  The user requested moving these annotations from services to controllers on September 30.
+  Services retain current-user validation and business ownership checks.
 - Cart PATCH accepts `quantityChange` of exactly 1 or -1 and returns the new quantity. GET cart
   includes `cartItemId`. Identity is still resolved in the service; only items from the current
   user's active cart are eligible. Zero soft-deletes the item; invalid steps return 400, missing,

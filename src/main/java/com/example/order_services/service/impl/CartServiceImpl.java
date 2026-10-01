@@ -11,7 +11,6 @@ import com.example.order_services.repository.*;
 import com.example.order_services.service.CartService;
 import com.example.order_services.service.CurrentUserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,7 +25,6 @@ import java.util.stream.Collectors;
 /** Read the cart and adjust quantities for the signed-in user. */
 @Service
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('USER')")
 @Transactional(readOnly = true)
 public class CartServiceImpl implements CartService {
     private final CartRepository cartRepository;

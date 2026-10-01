@@ -13,6 +13,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -20,6 +21,11 @@ import java.util.Map;
 /** Convert MVC-layer exceptions into HTTP statuses and a consistent BaseResponse structure. */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<BaseResponse<Void>> handleUnsupportedContentType() {
+        return ResponseEntity.status(415).body(BaseResponse.error(EnumCode.UNSUPPORTED_MEDIA_TYPE, "Unsupported content type"));
+    }
 
     @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
     ResponseEntity<BaseResponse<Void>> handleRouteNotFound() {

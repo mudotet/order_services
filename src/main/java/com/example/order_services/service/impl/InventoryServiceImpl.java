@@ -14,7 +14,6 @@ import com.example.order_services.service.InventoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Page;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +22,6 @@ import java.util.List;
 /** Manage inventory quantities for admins. */
 @Service
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
 public class InventoryServiceImpl implements InventoryService {
     private final InventoryRepository inventoryRepository;
 
