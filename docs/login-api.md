@@ -40,7 +40,7 @@ Passwords must match the existing BCrypt `password_hash`, with a maximum of 72 U
 No password or hash is returned.
 
 SHIPPER can log in but does not inherit USER or ADMIN access.
-Shippers can read their assigned orders and record delivery outcomes through the [shipper delivery APIs](shipper-delivery-api.md).
+Shippers can receive assigned orders and record delivery outcomes through the [shipper delivery APIs](../README.md#shipper-delivery). No shipper-specific list or detail GET endpoint is currently exposed.
 Only admins assign shippers or authorize delivery retries.
 HTTP Basic access also requires email in its Username field; display names are not accepted for authentication.
 Spring calls its login identifier `username`, but this application stores the account's unique email there.

@@ -37,6 +37,9 @@ public class TrackingLog {
     @Column(name = "take_note", length = 500)
     private String takeNote;
 
+    @Column(name = "recipient_name", length = 255, updatable = false)
+    private String recipientName;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "failure_reason", length = 50)

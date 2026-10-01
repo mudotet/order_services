@@ -1,5 +1,7 @@
 # Order Service APIs Design
 
+> Historical design from 2026-08-25, not the current API contract. Authentication, cart routes, discount ownership, shipping fees, and delivery workflows have changed. Use [README](../../../README.md) and its linked API guides for current behavior; consult this file only for the original design rationale.
+
 ## Goal
 
 Implement five beginner-friendly APIs for inventory, cart, discounts, order summary, and order creation against the supplied `order_services` MySQL schema.

@@ -21,7 +21,9 @@ public interface OrderRepository extends JpaRepository<Order, String> {
                 orders.user.userName, orders.user.phoneNumber, address.address, address.city,
                 coalesce((select sum(item.quantity) from OrderItem item
                     where item.order = orders and item.deleted = false), 0L),
-                orders.assignedAt, orders.estimatedDelivery, null)
+                orders.assignedAt, orders.estimatedDelivery, null,
+                (select log.recipientName from TrackingLog log where log.order = orders
+                    and log.newStatus.state = 'DELIVERED' and log.deleted = false))
             from Order orders left join Address address on address.id = orders.addressId
             where orders.shipper.id = :shipperId and orders.deleted = false and orders.user.deleted = false
               and orders.id = :orderId
@@ -31,7 +33,7 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     @Query("""
             select new com.example.order_services.dto.response.TrackingOrderDetailResponse(
                 orders.id, state.state, null, orders.total, address.address, payment.paymentMethod,
-                address.city, orders.estimatedDelivery, null)
+                address.city, orders.estimatedDelivery, null, null)
             from Order orders
             join orders.orderState state
             join Address address on address.id = orders.addressId

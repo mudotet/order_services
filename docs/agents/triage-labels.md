@@ -1,9 +1,13 @@
-# Triage Labels
+# Triage labels
 
-| Canonical role | Tracker label |
-| --- | --- |
-| `needs-triage` | `needs-triage` |
-| `needs-info` | `needs-info` |
-| `ready-for-agent` | `ready-for-agent` |
-| `ready-for-human` | `ready-for-human` |
-| `wontfix` | `wontfix` |
+| Canonical role | GitHub label | Meaning |
+| --- | --- | --- |
+| needs-triage | needs-triage | Needs maintainer evaluation |
+| needs-info | needs-info | Waiting for required information |
+| ready-for-agent | ready-for-agent | Specified and ready for an agent |
+| ready-for-human | ready-for-human | Requires human implementation |
+| wontfix | wontfix | Will not be actioned |
+
+Use the mapped label when a skill mentions a canonical role.
+Edit the GitHub-label column to change vocabulary.
+Readiness is separate from execution progress.
