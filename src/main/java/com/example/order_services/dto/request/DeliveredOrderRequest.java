@@ -10,7 +10,6 @@ import lombok.Setter;
 @Setter
 public class DeliveredOrderRequest {
     @NotBlank
-    @Pattern(regexp = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     private String orderId;
 
     @NotBlank
@@ -22,6 +21,5 @@ public class DeliveredOrderRequest {
     private String address;
 
     @NotBlank
-    @Pattern(regexp = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     private String deliveryAttemptId;
 }

@@ -18,16 +18,19 @@ import org.springframework.web.bind.annotation.*;
 public class ShipperController {
     private final ShipperService shipperService;
 
+    // API for shipper to receive an order for delivery
     @PostMapping("/receive")
     public BaseResponse<OrderDeliveryResponse> receive(@Valid @RequestBody ReceiveOrderRequest request) {
         return BaseResponse.success(shipperService.receive(request));
     }
 
+    // API for shipper to mark an order as delivered
     @PostMapping("/delivered")
     public BaseResponse<OrderDeliveryResponse> delivered(@Valid @RequestBody DeliveredOrderRequest request) {
         return BaseResponse.success(shipperService.delivered(request));
     }
 
+    // API for shipper to mark an order as failed
     @PostMapping("/failed")
     public BaseResponse<OrderDeliveryResponse> failed(@Valid @RequestBody FailedOrderRequest request) {
         return BaseResponse.success(shipperService.failed(request));

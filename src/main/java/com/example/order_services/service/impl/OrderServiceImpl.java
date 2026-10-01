@@ -208,6 +208,8 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderState(state);
         order.setUpdatedBy(actor.getId());
         orderRepository.save(order);
+
+        // Send notifications for shipping and delivered states.
         String message = switch (next) {
             case SHIPPING -> "Đơn hàng của bạn đang trên đường giao";
             case DELIVERED -> "Cảm ơn bạn đã mua hàng";
