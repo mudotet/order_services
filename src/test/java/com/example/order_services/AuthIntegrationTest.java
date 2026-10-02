@@ -115,7 +115,7 @@ class AuthIntegrationTest {
                 mvc.perform(patch("/api/orders/tracking/missing/state").session(session)
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{\"state\":\"SHIPPING\"}"))
-                        .andExpect(status().isNotFound());
+                        .andExpect(status().isForbidden());
             }
         }
     }
@@ -163,6 +163,68 @@ class AuthIntegrationTest {
         mvc.perform(login("user@example.com", "password"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.roles", containsInAnyOrder("USER", "SHIPPER")));
+    }
+
+    @Test
+    void readsCurrentSessionAndLogoutInvalidatesIt() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        mvc.perform(login("user@example.com", "password").session(session)).andExpect(status().isOk());
+        mvc.perform(get("/api/auth/me").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(accounts.get("USER").getId()))
+                .andExpect(jsonPath("$.data.roles", containsInAnyOrder("USER")));
+        mvc.perform(post("/api/auth/logout").session(session)).andExpect(status().isOk())
+                .andExpect(cookie().maxAge("JSESSIONID", 0));
+        assertThat(session.isInvalid()).isTrue();
+        mvc.perform(get("/api/auth/me")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void queryEndpointsEnforceRolesAndPagination() throws Exception {
+        MockHttpSession customer = new MockHttpSession();
+        mvc.perform(login("user@example.com", "password").session(customer)).andExpect(status().isOk());
+        mvc.perform(get("/api/orders").session(customer)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/orders/mine").session(customer)).andExpect(status().isOk());
+        mvc.perform(get("/api/orders/mine?size=101").session(customer)).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/catalog").session(customer)).andExpect(status().isOk());
+        mvc.perform(get("/api/addresses").session(customer)).andExpect(status().isOk());
+        mvc.perform(get("/api/payments").session(customer)).andExpect(status().isOk());
+        MockHttpSession admin = new MockHttpSession();
+        mvc.perform(login("admin@example.com", "password").session(admin)).andExpect(status().isOk());
+        mvc.perform(get("/api/orders").session(admin)).andExpect(status().isOk());
+        mvc.perform(get("/api/shippers").session(admin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].userId").value(accounts.get("SHIPPER").getId()));
+    }
+
+    @Test
+    void orderReadsScopeCustomersAndAssignedShippersIncludingUnassignedAdminOrders() throws Exception {
+        var address = com.example.order_services.entity.Address.builder().address("12 Main Street").build();
+        var state = com.example.order_services.entity.OrderState.builder().state("PROCESSING").build();
+        entityManager.persist(address);
+        entityManager.persist(state);
+        var order = com.example.order_services.entity.Order.builder().user(accounts.get("USER"))
+                .addressId(address.getId()).orderState(state).build();
+        entityManager.persist(order);
+        entityManager.flush();
+        MockHttpSession admin = new MockHttpSession();
+        mvc.perform(login("admin@example.com", "password").session(admin)).andExpect(status().isOk());
+        mvc.perform(get("/api/orders").session(admin)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+        MockHttpSession shipper = new MockHttpSession();
+        mvc.perform(login("shipper@example.com", "password").session(shipper)).andExpect(status().isOk());
+        mvc.perform(get("/api/shipper/orders/" + order.getId()).session(shipper))
+                .andExpect(status().isNotFound());
+        order.setShipper(accounts.get("SHIPPER"));
+        entityManager.flush();
+        mvc.perform(get("/api/shipper/orders/" + order.getId()).session(shipper)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.shippingAddress").value("12 Main Street"));
+        MockHttpSession customer = new MockHttpSession();
+        mvc.perform(login("user@example.com", "password").session(customer)).andExpect(status().isOk());
+        mvc.perform(get("/api/orders/mine").session(customer)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(1));
+        order.setUser(accounts.get("ADMIN"));
+        entityManager.flush();
+        mvc.perform(get("/api/orders/mine").session(customer)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalElements").value(0));
     }
 
     private MockHttpServletRequestBuilder login(String email, String password) {

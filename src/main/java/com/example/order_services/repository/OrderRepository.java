@@ -12,6 +12,31 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 public interface OrderRepository extends JpaRepository<Order, String> {
+    @Query("""
+            select o from Order o left join o.shipper s where o.deleted = false and o.user.deleted = false
+              and (:userId is null or o.user.id = :userId)
+              and (:shipperId is null or s.id = :shipperId)
+              and (:state = '' or o.orderState.state = :state)
+              and (lower(o.id) like lower(concat('%', :query, '%'))
+                   or lower(o.user.userName) like lower(concat('%', :query, '%')))
+            """)
+    org.springframework.data.domain.Page<Order> browse(String userId, String shipperId, String state,
+                                                       String query, org.springframework.data.domain.Pageable pageable);
+
+    Optional<Order> findFirstByIdAndDeletedFalseAndUser_DeletedFalse(String id);
+
+    @Query("""
+            select distinct a from Address a, Order o where a.id = o.addressId
+              and o.user.id = :userId and o.deleted = false and a.deleted = false
+            """)
+    java.util.List<com.example.order_services.entity.Address> findUserAddresses(String userId);
+
+    @Query("""
+            select distinct p from Payment p, Order o where p.id = o.paymentId
+              and o.user.id = :userId and o.deleted = false and p.deleted = false
+            """)
+    java.util.List<com.example.order_services.entity.Payment> findUserPayments(String userId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<Order> findByIdAndDeletedFalse(String id);
 

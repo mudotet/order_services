@@ -16,6 +16,12 @@ import org.springframework.web.bind.annotation.*;
 public class CartController {
     private final CartService cartService;
 
+    @PostMapping("/items")
+    public BaseResponse<CartDetailResponse> addItem(
+            @Valid @RequestBody com.example.order_services.dto.request.AddCartItemRequest request) {
+        return BaseResponse.success(cartService.addItem(request));
+    }
+
     // api getting cartDetail
     @GetMapping
     public BaseResponse<CartDetailResponse> getCartDetail() {

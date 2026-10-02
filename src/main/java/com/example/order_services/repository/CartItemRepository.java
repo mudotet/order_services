@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface CartItemRepository extends JpaRepository<CartItem, String> {
+    java.util.Optional<CartItem> findByCart_IdAndProductVariant_Id(String cartId, String variantId);
     // Fetch variants/products eagerly to read prices and names; exclude rows with soft-deleted cart items, variants, or products.
     @Query("""
             select item from CartItem item

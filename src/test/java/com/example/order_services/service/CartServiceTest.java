@@ -19,7 +19,7 @@ class CartServiceTest {
     private final CartItemRepository items = mock(CartItemRepository.class);
     private final InventoryRepository inventories = mock(InventoryRepository.class);
     private final UserRepository users = mock(UserRepository.class);
-    private final CartServiceImpl service = new CartServiceImpl(carts, items, inventories, new CurrentUserService(users));
+    private final CartServiceImpl service = new CartServiceImpl(carts, items, inventories, new CurrentUserService(users), users);
 
     @BeforeEach
     void signIn() {
@@ -53,6 +53,25 @@ class CartServiceTest {
         assertThat(response.getSubtotal()).isEqualByComparingTo("15.00");
         verify(inventories, times(1)).findAllByProductVariantIdInAndDeletedFalse(List.of("variant-id"));
         assertThat(item.getProductQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    void addItemAccumulatesQuantityAndRejectsInsufficientStock() {
+        CartItem item = stubCart(2, 4);
+        Cart cart = item.getCart();
+        User user = users.findByEmailAndDeletedFalse("alice@example.com").orElseThrow();
+        when(users.findByIdAndDeletedFalse("alice-id")).thenReturn(Optional.of(user));
+        when(carts.findByUserIdForUpdate("alice-id")).thenReturn(Optional.of(cart));
+        when(items.findByCart_IdAndProductVariant_Id("cart-id", "variant-id"))
+                .thenReturn(Optional.of(item));
+        when(inventories.findByProductVariantIdsForUpdate(List.of("variant-id")))
+                .thenReturn(List.of(Inventory.builder().productVariant(item.getProductVariant()).quantityInStock(4).build()));
+        service.addItem(new com.example.order_services.dto.request.AddCartItemRequest("variant-id", 2));
+        assertThat(item.getProductQuantity()).isEqualTo(4);
+        assertThatThrownBy(() -> service.addItem(
+                new com.example.order_services.dto.request.AddCartItemRequest("variant-id", 1)))
+                .isInstanceOf(com.example.order_services.exception.ApplicationException.class);
+        assertThat(item.getProductQuantity()).isEqualTo(4);
     }
 
     private CartItem stubCart(int quantity, int stock) {

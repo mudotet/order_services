@@ -31,6 +31,24 @@ public class AuthService {
     private final HttpServletRequest request;
     private final HttpServletResponse response;
 
+    public LoginResponse me() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        User user = userRepository.findByEmailAndDeletedFalse(authentication.getName())
+                .orElseThrow(() -> new BadCredentialsException("Invalid credentials"));
+        List<Role> roles = authentication.getAuthorities().stream()
+                .filter(a -> a.getAuthority().startsWith("ROLE_"))
+                .map(a -> Role.valueOf(a.getAuthority().substring(5))).toList();
+        return LoginResponse.builder().userId(user.getId()).userName(user.getUserName())
+                .email(user.getEmail()).roles(roles).build();
+    }
+
+    public void logout() {
+        new org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler()
+                .logout(request, response, SecurityContextHolder.getContext().getAuthentication());
+        new org.springframework.security.web.authentication.logout.CookieClearingLogoutHandler("JSESSIONID")
+                .logout(request, response, null);
+    }
+
     // Validate the email, password, and roles, then save the session.
     public LoginResponse login(LoginRequest login) {
         if (login.getPassword().getBytes(StandardCharsets.UTF_8).length > 72) {

@@ -16,6 +16,13 @@ import java.util.Collection;
 import java.util.List;
 
 public interface InventoryRepository extends JpaRepository<Inventory, String> {
+    @Query("""
+            select i from Inventory i join fetch i.productVariant v join fetch v.product p
+            where i.deleted = false and v.deleted = false and p.deleted = false
+            order by p.productName, v.id
+            """)
+    List<Inventory> findCatalog();
+
     @EntityGraph(attributePaths = "productVariant")
     List<Inventory> findAllByProductVariantIdInAndDeletedFalse(Collection<String> productVariantIds);
 

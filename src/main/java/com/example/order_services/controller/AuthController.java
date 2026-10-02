@@ -14,6 +14,17 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
     private final AuthService authService;
 
+    @GetMapping("/me")
+    public BaseResponse<LoginResponse> me() {
+        return BaseResponse.success(authService.me());
+    }
+
+    @PostMapping("/logout")
+    public BaseResponse<Void> logout() {
+        authService.logout();
+        return BaseResponse.success(null);
+    }
+
     // Log in with email and password, returning account details and roles from the database.
     @PostMapping("/login")
     public BaseResponse<LoginResponse> login(@Valid @RequestBody LoginRequest login) {

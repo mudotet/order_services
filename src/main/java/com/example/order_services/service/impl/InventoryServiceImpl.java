@@ -72,7 +72,8 @@ public class InventoryServiceImpl implements InventoryService {
                             : quantity < 20 ? StockStatus.LIMITED_STOCK : StockStatus.IN_STOCK;
                     return new ProductInventoryResponse(
                             variant.getProduct().getProductName(), variant.getId(), variant.getPrice(),
-                            quantity, status.name());
+                             quantity, status.name(), variant.getProduct().getId(),
+                             variant.getProduct().getProductType(), variant.getProductVariant());
                 });
      }
 
@@ -83,6 +84,10 @@ public class InventoryServiceImpl implements InventoryService {
     public ProductInventoryResponse updateProductInStock(String productId, String variantsId,
                                                          UpdateProductInStockRequest request) {
 
+        if (request == null || (request.getQuantityInStock() != null && request.getQuantityInStock() < 0)
+                || (request.getProductPrice() != null && request.getProductPrice().signum() < 0)) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Price and quantity must be nonnegative");
+        }
         if (request.getProductVariantId() != null && !variantsId.equals(request.getProductVariantId())) {
             throw new ApplicationException(EnumCode.BAD_REQUEST, "Product variant ID cannot be changed");
         }
@@ -96,17 +101,22 @@ public class InventoryServiceImpl implements InventoryService {
         }
 
         // PATCH: omitted fields retain their current values.
-        product.setProductName(request.getProductName());
-        product.setProductType(request.getProductType());
-        variant.setPrice(request.getProductPrice());
-        variant.setProductVariant(request.getProductDescription());
-        inventory.setQuantityInStock(request.getQuantityInStock());
+        if (request.getProductName() != null) {
+            if (request.getProductName().isBlank()) {
+                throw new ApplicationException(EnumCode.BAD_REQUEST, "Product name must not be blank");
+            }
+            product.setProductName(request.getProductName());
+        }
+        if (request.getProductType() != null) product.setProductType(request.getProductType());
+        if (request.getProductPrice() != null) variant.setPrice(request.getProductPrice());
+        if (request.getProductDescription() != null) variant.setProductVariant(request.getProductDescription());
+        if (request.getQuantityInStock() != null) inventory.setQuantityInStock(request.getQuantityInStock());
 
         // All three entities are managed; JPA flushes their changes in this transaction.
         int quantity = inventory.getQuantityInStock();
         StockStatus status = quantity <= 0 ? StockStatus.OUT_OF_STOCK
                 : quantity < 20 ? StockStatus.LIMITED_STOCK : StockStatus.IN_STOCK;
         return new ProductInventoryResponse(product.getProductName(), variant.getId(), variant.getPrice(),
-                quantity, status.name());
+                quantity, status.name(), product.getId(), product.getProductType(), variant.getProductVariant());
     }
 }

@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface OrderItemRepository extends JpaRepository<OrderItem, String> {
+    java.util.List<OrderItem> findAllByOrder_IdAndDeletedFalseOrderByCreatedAtAscIdAsc(String orderId);
+
     @Query("""
             select new com.example.order_services.dto.response.PurchasedItemResponse(
                 item.productVariant.product.productName, item.productVariant.productVariant,

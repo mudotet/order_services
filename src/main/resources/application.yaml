@@ -2,9 +2,9 @@ spring:
   application:
     name: Order_Services
   datasource:
-    url: jdbc:mysql://localhost:3306/order_services
-    username: root
-    password: root
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/order_services}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:

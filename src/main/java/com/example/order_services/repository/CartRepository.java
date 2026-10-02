@@ -10,6 +10,7 @@ import java.util.Optional;
 
 public interface CartRepository extends JpaRepository<Cart, String> {
     Optional<Cart> findByUser_IdAndDeletedFalse(String userId);
+    Optional<Cart> findByUser_Id(String userId);
 
     // Use a shared lock for cart updates and order creation; callers need an appropriate transaction to hold the lock.
     @Lock(LockModeType.PESSIMISTIC_WRITE)

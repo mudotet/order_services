@@ -31,6 +31,37 @@ public class CartServiceImpl implements CartService {
     private final CartItemRepository cartItemRepository;
     private final InventoryRepository inventoryRepository;
     private final CurrentUserService currentUserService;
+    private final UserRepository userRepository;
+
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public CartDetailResponse addItem(com.example.order_services.dto.request.AddCartItemRequest request) {
+        if (request == null || request.quantity() == null || request.quantity() < 1
+                || request.productVariantId() == null || request.productVariantId().isBlank()) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Variant and positive quantity are required");
+        }
+        User user = userRepository.findByIdAndDeletedFalse(currentUserService.getCurrentUser().getId())
+                .orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "User not found"));
+        Cart cart = cartRepository.findByUserIdForUpdate(user.getId()).orElseGet(() -> {
+            if (cartRepository.findByUser_Id(user.getId()).isPresent()) {
+                throw new ApplicationException(EnumCode.BAD_REQUEST, "Cart is inactive");
+            }
+            return cartRepository.save(Cart.builder().user(user).build());
+        });
+        Inventory inventory = inventoryRepository.findByProductVariantIdsForUpdate(List.of(request.productVariantId()))
+                .stream().findFirst().orElseThrow(() -> new ApplicationException(EnumCode.NOT_FOUND, "Variant not found"));
+        CartItem item = cartItemRepository.findByCart_IdAndProductVariant_Id(cart.getId(), request.productVariantId())
+                .orElseGet(() -> CartItem.builder().cart(cart).productVariant(inventory.getProductVariant())
+                        .productQuantity(0).build());
+        long quantity = (item.isDeleted() ? 0L : item.getProductQuantity()) + request.quantity();
+        if (quantity > inventory.getQuantityInStock() || quantity > Integer.MAX_VALUE) {
+            throw new ApplicationException(EnumCode.BAD_REQUEST, "Insufficient stock");
+        }
+        item.setDeleted(false);
+        item.setProductQuantity((int) quantity);
+        cartItemRepository.save(item);
+        return getCartDetail();
+    }
 
     // Fetch the signed-in user's cart, total amount, and stock status.
     @Override

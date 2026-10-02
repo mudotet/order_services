@@ -15,4 +15,7 @@ public class ProductInventoryResponse {
     private BigDecimal productPrice;
     private Integer productStockQuantity;
     private String productStockState;
+    private String productId;
+    private String productType;
+    private String productDescription;
 }
