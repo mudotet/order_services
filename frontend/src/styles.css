@@ -3,6 +3,10 @@
 @theme { --font-sans: 'Geist', system-ui, sans-serif; }
 :root { color-scheme:light; --canvas:#f4f5f8; --surface:#fff; --ink:#202836; --muted:#637086; --line:#e5e8ef; --accent:#344c22; --soft:#edf4e5; --button:#202b3a; --button-ink:#f5f7fb; }
 @media(prefers-color-scheme:dark) { :root { color-scheme:dark; --canvas:#101620; --surface:#17202d; --ink:#e8edf5; --muted:#a6b3c6; --line:#2b3748; --accent:#d7f594; --soft:#283622; --button:#d7f594; --button-ink:#19231a; } }
+html { scroll-behavior:smooth; }
+h1,h2,h3 { text-wrap:balance; }
+p { text-wrap:pretty; }
+table { font-variant-numeric:tabular-nums; }
 body { margin:0; background:var(--canvas); color:var(--ink); font-family:var(--font-sans); -webkit-font-smoothing:antialiased; }
 button,a,input,select,textarea { -webkit-tap-highlight-color:transparent; }
 button { cursor:pointer; }

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/welcome.png" alt="Order Workspace — cinematic welcome page" width="100%" />
+  <img src="docs/images/welcome.png" alt="Order Workspace — cinematic welcome page" width="760" />
 </p>
 
 <h1 align="center">Order Workspace</h1>
@@ -29,12 +29,14 @@ A React interface with a graphite-and-lime identity, self-hosted Geist typograph
 
 ### A clear view of operations
 
-![Administrator dashboard with demo order data](docs/images/dashboard.png)
+<p align="center">
+  <img src="docs/images/dashboard.png" alt="Administrator dashboard with demo order data" width="720" />
+</p>
 
 <table>
   <tr>
-    <td width="70%"><img src="docs/images/inventory.png" alt="Product and inventory management with demo data" width="100%" /></td>
-    <td width="30%"><img src="docs/images/mobile.png" alt="Responsive inventory interface on mobile" width="100%" /></td>
+    <td width="70%"><img src="docs/images/inventory.png" alt="Product and inventory management with demo data" width="520" /></td>
+    <td width="30%"><img src="docs/images/mobile.png" alt="Responsive inventory interface on mobile" width="180" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Inventory, without the guesswork.</strong><br />Products, prices, variants, and stock updates.</td>
@@ -60,7 +62,7 @@ npm --prefix frontend ci
 npm --prefix frontend run dev
 ```
 
-Open **http://localhost:5173**, choose **Vào không gian**, and use the prefilled account:
+Open **http://localhost:5173**, choose **Enter workspace**, and use the prefilled account:
 
 | Demo email | Demo password |
 | :--- | :--- |
